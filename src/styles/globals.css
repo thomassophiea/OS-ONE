@@ -154,6 +154,216 @@
   --info-foreground: rgba(30, 31, 42, 1.00);
 }
 
+/* ===== Extreme Platform ONE Theme ===== */
+.theme-extreme,
+html.theme-extreme,
+html.theme-extreme body,
+:root.theme-extreme {
+  /* ===== LEGACY TOKENS ===== */
+  --background: #1a1a2e !important; /* Very dark blue-purple */
+  --foreground: rgba(255, 255, 255, 0.87) !important; /* High emphasis text */
+  --card: #252540 !important; /* Slightly lighter dark */
+  --card-foreground: rgba(255, 255, 255, 0.87) !important;
+  --popover: #252540 !important;
+  --popover-foreground: rgba(255, 255, 255, 0.87) !important;
+  --primary: #7c3aed !important; /* Purple accent */
+  --primary-foreground: #ffffff !important;
+  --secondary: #3b3b5c !important; /* Muted purple-gray */
+  --secondary-foreground: rgba(255, 255, 255, 0.87) !important;
+  --muted: #252540 !important;
+  --muted-foreground: rgba(255, 255, 255, 0.60) !important; /* Medium emphasis text */
+  --accent: #7c3aed !important;
+  --accent-foreground: #ffffff !important;
+  --destructive: #ef4444 !important;
+  --destructive-foreground: #ffffff !important;
+  --border: rgba(255, 255, 255, 0.1) !important;
+  --input: #1a1a2e !important;
+  --input-background: #252540 !important;
+  --ring: #7c3aed !important;
+  --chart-1: #7c3aed !important; /* Primary purple */
+  --chart-2: #10b981 !important; /* Teal-green */
+  --chart-3: #f59e0b !important; /* Amber */
+  --chart-4: #ef4444 !important; /* Red */
+  --chart-5: #06b6d4 !important; /* Cyan */
+  --success: #10b981 !important; /* Teal-green for success/check icons */
+  --success-foreground: #ffffff !important;
+  --warning: #f59e0b !important;
+  --warning-foreground: #000000 !important;
+  --info: #06b6d4 !important;
+  --info-foreground: #000000 !important;
+
+  /* ===== SEMANTIC TOKENS - Background ===== */
+  --background-default: #1a1a2e !important;
+  --background-secondary: #252540 !important;
+  --background-inverse: #ffffff !important;
+
+  /* ===== SEMANTIC TOKENS - Surface ===== */
+  --surface-primary: #1a1a2e !important;
+  --surface-secondary: #252540 !important;
+  --surface-elevated: #2d2d4a !important;
+
+  /* ===== SEMANTIC TOKENS - Brand ===== */
+  --brand-primary: #7c3aed !important;
+  --brand-primary-hover: #6d28d9 !important;
+  --brand-primary-active: #5b21b6 !important;
+  --brand-secondary: #10b981 !important;
+  --brand-secondary-hover: #059669 !important;
+
+  /* ===== SEMANTIC TOKENS - Text ===== */
+  --text-primary: rgba(255, 255, 255, 0.87) !important;
+  --text-secondary: rgba(255, 255, 255, 0.60) !important;
+  --text-muted: rgba(255, 255, 255, 0.38) !important;
+  --text-inverse: #1a1a2e !important;
+  --text-on-brand: #ffffff !important;
+
+  /* ===== SEMANTIC TOKENS - Border ===== */
+  --border-default: rgba(255, 255, 255, 0.1) !important;
+  --border-subtle: rgba(255, 255, 255, 0.05) !important;
+  --border-focus: #7c3aed !important;
+
+  /* ===== SEMANTIC TOKENS - Status ===== */
+  --status-success: #10b981 !important;
+  --status-success-bg: rgba(16, 185, 129, 0.15) !important;
+  --status-warning: #f59e0b !important;
+  --status-warning-bg: rgba(245, 158, 11, 0.15) !important;
+  --status-error: #ef4444 !important;
+  --status-error-bg: rgba(239, 68, 68, 0.15) !important;
+  --status-info: #06b6d4 !important;
+  --status-info-bg: rgba(6, 182, 212, 0.15) !important;
+
+  /* ===== SEMANTIC TOKENS - Table ===== */
+  --table-header-bg: #252540 !important;
+  --table-header-text: rgba(255, 255, 255, 0.60) !important;
+  --table-header-border: rgba(255, 255, 255, 0.1) !important;
+  --table-row-bg: #1a1a2e !important;
+  --table-row-hover: rgba(124, 58, 237, 0.08) !important;
+  --table-row-selected: rgba(124, 58, 237, 0.15) !important;
+  --table-row-border: rgba(255, 255, 255, 0.06) !important;
+  --table-cell-text: rgba(255, 255, 255, 0.87) !important;
+  --table-cell-muted: rgba(255, 255, 255, 0.60) !important;
+
+  /* ===== SEMANTIC TOKENS - Button ===== */
+  --button-primary-bg: #7c3aed !important;
+  --button-primary-hover: #6d28d9 !important;
+  --button-primary-active: #5b21b6 !important;
+  --button-primary-text: #ffffff !important;
+  --button-secondary-bg: #252540 !important;
+  --button-secondary-hover: #3b3b5c !important;
+  --button-secondary-active: #4a4a70 !important;
+  --button-secondary-text: rgba(255, 255, 255, 0.87) !important;
+  --button-outline-border: rgba(124, 58, 237, 0.5) !important;
+  --button-outline-hover-bg: rgba(124, 58, 237, 0.1) !important;
+
+  /* ===== SEMANTIC TOKENS - Navigation ===== */
+  --nav-background: #1a1a2e !important;
+  --nav-text: rgba(255, 255, 255, 0.87) !important;
+  --nav-text-muted: rgba(255, 255, 255, 0.60) !important;
+  --nav-item-hover: rgba(124, 58, 237, 0.15) !important;
+  --nav-item-active: #7c3aed !important;
+  --nav-border: rgba(255, 255, 255, 0.1) !important;
+
+  /* ===== SEMANTIC TOKENS - Form ===== */
+  --form-label-text: rgba(255, 255, 255, 0.87) !important;
+  --form-label-required: #ef4444 !important;
+  --input-bg: #252540 !important;
+  --input-border: rgba(255, 255, 255, 0.15) !important;
+  --input-border-hover: rgba(124, 58, 237, 0.5) !important;
+  --input-border-focus: #7c3aed !important;
+  --input-text: rgba(255, 255, 255, 0.87) !important;
+  --input-placeholder: rgba(255, 255, 255, 0.38) !important;
+  --input-disabled-bg: #1a1a2e !important;
+  --input-disabled-text: rgba(255, 255, 255, 0.38) !important;
+  --input-error-border: #ef4444 !important;
+  --input-error-bg: rgba(239, 68, 68, 0.1) !important;
+
+  /* ===== SEMANTIC TOKENS - Link ===== */
+  --link-default: #a78bfa !important; /* Lighter purple for links */
+  --link-hover: #c4b5fd !important;
+  --link-visited: #8b5cf6 !important;
+  --link-active: #7c3aed !important;
+
+  /* Extreme Sidebar - Dark with purple accent */
+  --sidebar: #1a1a2e !important;
+  --sidebar-foreground: rgba(255, 255, 255, 0.87) !important;
+  --sidebar-primary: #7c3aed !important;
+  --sidebar-primary-foreground: #ffffff !important;
+  --sidebar-accent: rgba(124, 58, 237, 0.15) !important;
+  --sidebar-accent-foreground: rgba(255, 255, 255, 0.87) !important;
+  --sidebar-border: rgba(255, 255, 255, 0.1) !important;
+  --sidebar-ring: #7c3aed !important;
+
+  /* Surface elevation for cards */
+  --surface-0dp: #1a1a2e !important;
+  --surface-1dp: #1f1f35 !important;
+  --surface-2dp: #232340 !important;
+  --surface-3dp: #252545 !important;
+  --surface-4dp: #28284a !important;
+  --surface-6dp: #2d2d50 !important;
+  --surface-8dp: #303055 !important;
+  --surface-12dp: #35355a !important;
+  --surface-16dp: #38385f !important;
+  --surface-24dp: #3d3d65 !important;
+}
+
+/* Force Extreme sidebar background color */
+.theme-extreme .bg-sidebar,
+.theme-extreme [class*="bg-sidebar"] {
+  background-color: #1a1a2e !important;
+}
+
+/* Force Extreme sidebar text color */
+.theme-extreme .text-sidebar-foreground,
+.theme-extreme [class*="text-sidebar"] {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+/* Extreme sidebar left purple accent bar */
+.theme-extreme .sidebar-accent-bar,
+.theme-extreme [data-sidebar="sidebar"] {
+  position: relative;
+}
+
+.theme-extreme .sidebar-accent-bar::before,
+.theme-extreme [data-sidebar="sidebar"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #7c3aed 0%, #a855f7 50%, #7c3aed 100%);
+  z-index: 10;
+}
+
+/* Alternative class for explicit accent bar */
+.extreme-accent-bar {
+  position: relative;
+}
+
+.extreme-accent-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #7c3aed 0%, #a855f7 50%, #7c3aed 100%);
+  z-index: 10;
+}
+
+/* Extreme theme card hover effect */
+.theme-extreme .card:hover {
+  background-color: #2d2d4a !important;
+  border-color: rgba(124, 58, 237, 0.3) !important;
+}
+
+/* Extreme theme active/selected states */
+.theme-extreme .active,
+.theme-extreme [data-active="true"] {
+  background-color: rgba(124, 58, 237, 0.15) !important;
+  border-left: 3px solid #7c3aed !important;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

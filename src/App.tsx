@@ -2,7 +2,9 @@ import { useState, useEffect, lazy, Suspense, useMemo } from 'react';
 import { useGlobalFilters } from './hooks/useGlobalFilters';
 import type { AssistantContext } from './components/NetworkChatbot';
 import { LoginForm } from './components/LoginForm';
-import { Sidebar } from './components/Sidebar';
+import { SidebarExtreme } from './components/SidebarExtreme';
+import { TopHeader } from './components/TopHeader';
+import { RightActionBar } from './components/RightActionBar';
 import { MobileApp } from './components/mobile/MobileApp';
 import { DetailSlideOut } from './components/DetailSlideOut';
 import { PlaceholderPage } from './components/PlaceholderPage';
@@ -10,6 +12,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy load route components for better performance with prefetch
 const DashboardEnhanced = lazy(() => import('./components/DashboardEnhanced').then(m => ({ default: m.DashboardEnhanced })));
+const DashboardExtreme = lazy(() => import('./components/DashboardExtreme').then(m => ({ default: m.DashboardExtreme })));
 const AccessPoints = lazy(() => import('./components/AccessPoints').then(m => ({ default: m.AccessPoints })));
 const TrafficStatsConnectedClients = lazy(() => import('./components/TrafficStatsConnectedClients').then(m => ({ default: m.TrafficStatsConnectedClients })));
 
@@ -1004,107 +1007,57 @@ export default function App() {
 
   return (
     <>
-      <div className="h-screen flex bg-background">
-        <Sidebar
-          onLogout={handleLogout}
-          adminRole={adminRole}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          theme={theme}
-          onThemeToggle={toggleTheme}
+      <div className="h-screen flex flex-col bg-[#1a1a2e] theme-extreme">
+        {/* Top Header */}
+        <TopHeader
+          siteName={siteName || 'Select Site'}
+          userEmail={localStorage.getItem('user_email') || undefined}
+          userInitials={localStorage.getItem('user_email')?.substring(0, 2).toUpperCase()}
         />
+        
+        <div className="flex flex-1 overflow-hidden">
+          <SidebarExtreme
+            onLogout={handleLogout}
+            adminRole={adminRole}
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            theme={theme}
+            onThemeToggle={toggleTheme}
+          />
 
-        <main
-          className="flex-1 overflow-auto transition-all duration-200"
-          style={{
-            paddingBottom: isDevModeOpen ? `${devPanelHeight}px` : '0'
-          }}
-        >
-          <div className="p-4 sm:p-6 pt-16 sm:pt-6">
-            {/* Top Bar - Simplified on mobile */}
-            <div className="flex justify-between items-center gap-3 mb-4 sm:mb-6">
-              <h2 className="text-base sm:text-lg font-semibold text-[rgba(255,255,255,1)] truncate flex-1">
-                {pageInfo[currentPage as keyof typeof pageInfo]?.title || 'Mobility Engine'}
-              </h2>
-
-              <div className="flex items-center gap-2">
-                {/* Desktop-only developer tools */}
-                {!device.isMobile && (
-                  <>
-                    {/* Developer Mode Toggle */}
-                    <Button
-                      variant={isDevModeOpen ? 'default' : 'secondary'}
-                      size="sm"
-                      onClick={handleToggleDevMode}
-                      className="flex items-center"
-                      title="Toggle Developer Mode"
-                    >
-                      <Braces className="h-4 w-4" />
-                    </Button>
-
-                    {/* API Test Tool */}
-                    <Button
-                      variant={currentPage === 'api-test' ? 'default' : 'secondary'}
-                      size="sm"
-                      onClick={() => setCurrentPage('api-test')}
-                      className="flex items-center"
-                      title="API Test Tool"
-                    >
-                      <FlaskConical className="h-4 w-4" />
-                    </Button>
-
-                    {/* GitHub Repository */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => window.open('https://github.com/thomassophiea/EDGE', '_blank', 'noopener,noreferrer')}
-                      className="flex items-center"
-                      title="View on GitHub"
-                    >
-                      <Github className="h-4 w-4" />
-                    </Button>
-
-                    {/* Notifications Menu */}
-                    <NotificationsMenu />
-
-                    {/* Apps Menu */}
-                    <AppsMenu />
-                  </>
-                )}
-
-                {/* Always show User Menu */}
-                <UserMenu
-                  onLogout={handleLogout}
-                  theme={theme}
-                  onThemeToggle={toggleTheme}
-                  userEmail={localStorage.getItem('user_email') || undefined}
-                  onNavigateTo={handlePageChange}
-                />
-              </div>
-            </div>
-
-            <div>
+          <main
+            className="flex-1 overflow-auto transition-all duration-200 bg-[#1a1a2e]"
+            style={{
+              paddingBottom: isDevModeOpen ? `${devPanelHeight}px` : '0'
+            }}
+          >
+            <div className="p-4 sm:p-6">
               <Suspense fallback={
                 <div className="flex items-center justify-center h-64">
                   <div className="text-center">
-                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
+                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-purple-500 border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
                       <span className="sr-only">Loading...</span>
                     </div>
-                    <p className="mt-4 text-sm text-muted-foreground">Loading page...</p>
+                    <p className="mt-4 text-sm text-gray-400">Loading page...</p>
                   </div>
                 </div>
               }>
                 {renderPage()}
               </Suspense>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
 
         {/* Only show toasts on desktop - mobile uses bottom sheets for notifications */}
         {!device.isMobile && <Toaster />}
 
         {/* Detail Slide-out Panel */}
         {renderDetailPanel()}
+        
+        {/* Right Action Bar - Desktop only */}
+        {!device.isMobile && (
+          <RightActionBar />
+        )}
       </div>
       
       {/* Network Assistant Chatbot - Only render if enabled in preferences */}
