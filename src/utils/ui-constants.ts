@@ -1,6 +1,6 @@
 /**
- * Unified UI Constants for AIO Platform Management Dashboard
- * AI-Informed Orchestration
+ * Unified UI Constants for EDGE Platform Management Dashboard
+ * Edge Data Gateway Engine
  * Ensures consistency across all pages
  */
 
