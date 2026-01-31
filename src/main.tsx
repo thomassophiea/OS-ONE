@@ -2,8 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { initVersionGate, getAppVersion, getCacheVersion } from "./lib/versionGate.ts";
-import "./styles/globals.css";
 import "./index.css";
+import "./styles/globals.css";
 
 /**
  * Initialize the application with version gate check
