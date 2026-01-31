@@ -1,0 +1,6 @@
+[build]
+builder = "nixpacks"
+buildCommand = "cd 'Prototype Template for Extreme Platform ONE' && npm install && npm run build"
+
+[deploy]
+startCommand = "cd 'Prototype Template for Extreme Platform ONE' && npx serve -s build -l $PORT"
