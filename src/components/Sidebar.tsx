@@ -192,15 +192,16 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
           );
         })}
         
-        {/* Configure Section */}
+        {/* Configure Section - Hidden for now */}
+        {false && (
         <div className="space-y-1">
           <Button
             variant={isConfigureActive ? "default" : "ghost"}
             className={cn(
               "w-full justify-start h-10",
               isCollapsed ? "px-2" : "px-3",
-              isConfigureActive 
-                ? "bg-sidebar-primary text-sidebar-primary-foreground" 
+              isConfigureActive
+                ? "bg-sidebar-primary text-sidebar-primary-foreground"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             )}
             onClick={() => {
@@ -221,7 +222,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
               </>
             )}
           </Button>
-          
+
           {/* Configure Sub-items */}
           {!isCollapsed && isConfigureExpanded && (
             <div className="ml-6 space-y-1">
@@ -248,9 +249,10 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
             </div>
           )}
         </div>
+        )}
 
-        {/* System Section - Desktop only */}
-        {!device.isMobile && (
+        {/* System Section - Hidden for now */}
+        {false && !device.isMobile && (
           <div className="space-y-1">
             <Button
               variant={isSystemActive ? "default" : "ghost"}
@@ -308,8 +310,8 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
           </div>
         )}
 
-        {/* Desktop-only: Tools and Administration */}
-        {!device.isMobile && (
+        {/* Desktop-only: Tools and Administration - Hidden for now */}
+        {false && !device.isMobile && (
           <>
             {/* Tools - Navigation Item */}
             <Button
