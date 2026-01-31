@@ -55,10 +55,13 @@
       "devDependencies": {
           "@types/node": "^20.10.0",
           "@vitejs/plugin-react-swc": "^3.10.2",
-          "vite": "6.3.5"
+          "vite": "6.3.5",
+          "serve": "^14.2.1"
       },
       "scripts": {
           "dev": "vite",
-          "build": "vite build"
+          "build": "vite build",
+          "start": "serve -s build -l ${PORT:-3000}",
+          "preview": "vite preview"
       }
   }
