@@ -1,118 +1,61 @@
 **Add your own guidelines here**
-
 <!--
 
-# ExtremeCloud One Design Language System (EDS) Guidelines
+System Guidelines
 
-## General Guidelines
+Use this file to provide the AI with rules and guidelines you want it to follow.
+This template outlines a few examples of things you can add. You can add your own sections and format it to suit your needs
 
-* Do not modify, remove or alter the components or the layout when using this template
-* The Page Content Container div will be replaced when user prompts
-* Use responsive layouts with flexbox and grid by default - avoid absolute positioning unless necessary
-* Only use EDS component instances from the library - never create custom variants
-* Use EDS color tokens exclusively - never hardcode color values
-* Base font size: 14px
-* Use EDS spacing scale: 4px, 8px, 12px, 16px, 24px, 32px, 40px, 48px, 64px
-* Maintain WCAG 2.2 Level AA contrast ratios (4.5:1 for text, 3:1 for UI components)
-* Design for desktop viewports 1280px+ (primary target for enterprise applications)
+TIP: More context isn't always better. It can confuse the LLM. Try and add the most important rules you need
 
----
+# General guidelines
 
-## Button Guidelines
+Any general rules you want the AI to follow.
+For example:
 
-* **Primary**: Solid fill, one per section, for main actions like "Save", "Create", "Submit"
-* **Secondary**: Outlined style for alternative actions like "Cancel", "Go Back"
-* **Tertiary**: Text-only for low priority actions like "Skip", "Dismiss"
-* **Danger**: Red fill/outline, always pair with confirmation for "Delete", "Remove"
-* Default height: 40px
-* Labels should be 1-3 words, action-oriented (start with verbs)
-* Include loading state with spinner for processing actions
+* Only use absolute positioning when necessary. Opt for responsive and well structured layouts that use flexbox and grid by default
+* Refactor code as you go to keep code clean
+* Keep file sizes small and put helper functions and components in their own files.
 
----
+--------------
 
-## Form Input Guidelines
+# Design system guidelines
+Rules for how the AI should make generations look like your company's design system
 
-* **Text inputs**: 40px height, show validation states (default, focus, error, success, disabled)
-* **Select dropdowns**: Use for 3-12 options, add search for 12+ options, max dropdown height 320px
-* **Radio buttons**: Use for 2-5 mutually exclusive options, show all options visible
-* **Checkboxes**: Use for multiple selections, include "Select All" for 5+ options
-* Error messages appear below inputs in semantic error color
-* Helper text appears below inputs in neutral color
+Additionally, if you select a design system to use in the prompt box, you can reference
+your design system's components, tokens, variables and components.
+For example:
 
----
+* Use a base font-size of 14px
+* Date formats should always be in the format “Jun 10”
+* The bottom toolbar should only ever have a maximum of 4 items
+* Never use the floating action button with the bottom toolbar
+* Chips should always come in sets of 3 or more
+* Don't use a dropdown if there are 2 or fewer options
 
-## Data Grid Guidelines
+You can also create sub sections and add more specific details
+For example:
 
-* **Header row**: Fixed/sticky at top for scrolling tables
-* **Row height**: Compact (32px), Default (40px), Comfortable (48px)
-* Use zebra striping for readability in large tables
-* Include column sorting indicators in headers
-* Use checkboxes in first column for row selection
-* Show pagination with 25, 50, 100 rows per page options
-* Use skeleton loaders for loading states
-* Display helpful empty states when no data exists
 
----
+## Button
+The Button component is a fundamental interactive element in our design system, designed to trigger actions or navigate
+users through the application. It provides visual feedback and clear affordances to enhance user experience.
 
-## Navigation Guidelines
+### Usage
+Buttons should be used for important actions that users need to take, such as form submissions, confirming choices,
+or initiating processes. They communicate interactivity and should have clear, action-oriented labels.
 
-* **Top nav**: 64px height, logo left, user profile right, fixed position
-* **Side nav**: 240px expanded, 64px collapsed, show icons + labels when expanded
-* **Breadcrumbs**: Separate with "/" character, make each level clickable
-* **Tabs**: Use for 3-7 related views, highlight active tab with underline
-
----
-
-## Modal & Dialog Guidelines
-
-* Center in viewport with backdrop overlay
-* Max width: 600px standard, 800px large
-* Include close button in header
-* Primary action button on right, cancel on left
-* Close on backdrop click or ESC key
-* For destructive actions, use confirmation dialogs with clear consequences
-
----
-
-## Notification Guidelines
-
-* **Toast notifications**: Top-right position, 3-5 seconds duration (10 seconds for errors), include close button
-* **Alert banners**: Top of page/section, persistent until dismissed, include icon matching type
-* Support variants: success (green), warning (yellow/orange), error (red), info (blue)
-
----
-
-## Status & Indicator Guidelines
-
-* **Status badges**: Pill shape with color + text label
-* **Device states**: Online (green), Offline (gray), Error (red), Warning (yellow), Update Available (blue)
-* **Port status**: Active (green with metrics), Inactive (gray), Error (red with details)
-* **Progress**: Use spinner for indeterminate, progress bar for determinate (0-100%)
-
----
-
-## Typography Guidelines
-
-* Use system font stack or EDS typeface
-* Line height: 1.5 for body, 1.2 for headings
-* Weights: Regular (300), Medium (400), Semibold (500), Bold (600)
-* Type scale: 12px, 14px, 16px, 18px, 20px, 24px, 32px, 40px
-
----
-
-## Spacing & Layout Guidelines
-
-* Component padding: Compact (8px), Default (16px), Comfortable (24px)
-* Minimum 16px between major components
-* Section spacing: 32px-48px between distinct sections
-* Border radius: Small (4px), Medium (8px), Large (12px), Pills (999px)
-
----
-
-## Content Guidelines
-
-* Use sentence case for labels and buttons
-* Be concise and action-oriented with active voice
-* Error messages should be specific and helpful with next steps
-* Use consistent terminology throughout the application
+### Variants
+* Primary Button
+  * Purpose : Used for the main action in a section or page
+  * Visual Style : Bold, filled with the primary brand color
+  * Usage : One primary button per section to guide users toward the most important action
+* Secondary Button
+  * Purpose : Used for alternative or supporting actions
+  * Visual Style : Outlined with the primary color, transparent background
+  * Usage : Can appear alongside a primary button for less important actions
+* Tertiary Button
+  * Purpose : Used for the least important actions
+  * Visual Style : Text-only with no border, using primary color
+  * Usage : For actions that should be available but not emphasized
 -->
