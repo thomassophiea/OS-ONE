@@ -48,6 +48,8 @@ const EventAlarmDashboard = lazy(() => import('./components/EventAlarmDashboard'
 const SecurityDashboard = lazy(() => import('./components/SecurityDashboard').then(m => ({ default: m.SecurityDashboard })));
 const GuestManagement = lazy(() => import('./components/GuestManagement').then(m => ({ default: m.GuestManagement })));
 const ApiDocumentation = lazy(() => import('./components/ApiDocumentation').then(m => ({ default: m.ApiDocumentation })));
+const Workspace = lazy(() => import('./components/Workspace').then(m => ({ default: m.Workspace })));
+const HelpPage = lazy(() => import('./components/HelpPage').then(m => ({ default: m.HelpPage })));
 import { apiService, ApiCallLog } from './services/api';
 import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
@@ -63,6 +65,7 @@ import { applyTheme as applyThemeColors } from './lib/themes';
 import { useDeviceDetection } from './hooks/useDeviceDetection';
 
 const pageInfo = {
+  'workspace': { title: 'Workspace', description: 'Create custom widgets for Devices, Clients, Licensing, and Alerts' },
   'service-levels': { title: 'Contextual Insights', description: 'Context-aware network monitoring and analytics' },
   'app-insights': { title: 'App Insights', description: 'Application visibility and traffic analytics' },
   'connected-clients': { title: 'Connected Clients', description: 'View and manage connected devices' },
@@ -88,6 +91,7 @@ const pageInfo = {
   'api-documentation': { title: 'API Documentation', description: 'AIO Platform REST API reference' },
   'configure-sites': { title: 'Sites', description: 'Manage and configure network sites and locations' },
   'configure-networks': { title: 'Configure Networks', description: 'Set up and manage network configurations' },
+  'help': { title: 'Help & Support', description: 'Get assistance with the EDGE platform using AI' },
 };
 
 interface DetailPanelState {
@@ -98,7 +102,7 @@ interface DetailPanelState {
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentPage, setCurrentPage] = useState('service-levels');
+  const [currentPage, setCurrentPage] = useState('workspace');
   const [adminRole, setAdminRole] = useState<string | null>(null);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -840,6 +844,8 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'workspace':
+        return <Workspace api={apiService} />;
       case 'service-levels':
         return <DashboardEnhanced />;
       case 'app-insights':
@@ -922,6 +928,8 @@ export default function App() {
         return <ApiTestTool />;
       case 'api-documentation':
         return <ApiDocumentation onNavigateBack={() => setCurrentPage('service-levels')} />;
+      case 'help':
+        return <HelpPage />;
       default:
         const info = pageInfo[currentPage as keyof typeof pageInfo];
         if (!info) {

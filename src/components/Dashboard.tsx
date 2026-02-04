@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
-import { 
+import {
   RefreshCw,
   AlertTriangle,
   CheckCircle,
@@ -19,6 +19,7 @@ import {
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { SaveToWorkspace } from './SaveToWorkspace';
 
 interface DashboardData {
   networkHealth: {
@@ -503,9 +504,19 @@ export function Dashboard() {
               <Activity className="h-5 w-5 text-primary" />
               <CardTitle>Network Health</CardTitle>
             </div>
-            <Badge variant={apHealthPercent >= 90 ? 'default' : apHealthPercent >= 70 ? 'secondary' : 'destructive'}>
-              {apHealthPercent.toFixed(0)}% Healthy
-            </Badge>
+            <div className="flex items-center gap-2">
+              <SaveToWorkspace
+                widgetId="dashboard-network-health"
+                widgetType="metric_card"
+                title="Network Health"
+                endpointRefs={['access_points.summary']}
+                sourcePage="dashboard"
+                catalogId="metric_network_health"
+              />
+              <Badge variant={apHealthPercent >= 90 ? 'default' : apHealthPercent >= 70 ? 'secondary' : 'destructive'}>
+                {apHealthPercent.toFixed(0)}% Healthy
+              </Badge>
+            </div>
           </div>
           <CardDescription>Real-time network infrastructure status</CardDescription>
         </CardHeader>
@@ -702,7 +713,7 @@ export function Dashboard() {
               <Users className="h-5 w-5 text-info" />
               <CardTitle>Unique Clients</CardTitle>
             </div>
-            <div className="flex gap-4">
+            <div className="flex items-center gap-4">
               <div className="text-right">
                 <div className="text-sm text-muted-foreground">Current</div>
                 <div className="text-lg font-semibold text-primary">
@@ -715,6 +726,14 @@ export function Dashboard() {
                   {avgClients}
                 </div>
               </div>
+              <SaveToWorkspace
+                widgetId="dashboard-unique-clients-chart"
+                widgetType="timeseries"
+                title="Unique Clients Over Time"
+                endpointRefs={['clients.count_timeseries']}
+                sourcePage="dashboard"
+                catalogId="clients_count_timeseries"
+              />
             </div>
           </div>
           <CardDescription>Connected wireless clients over time</CardDescription>
@@ -762,9 +781,19 @@ export function Dashboard() {
     return (
       <Card className="surface-2dp border-secondary/10">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-secondary" />
-            <CardTitle>Top Sites by Clients</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-secondary" />
+              <CardTitle>Top Sites by Clients</CardTitle>
+            </div>
+            <SaveToWorkspace
+              widgetId="dashboard-top-sites"
+              widgetType="topn_table"
+              title="Top Sites by Clients"
+              endpointRefs={['sites.summary']}
+              sourcePage="dashboard"
+              catalogId="sites_by_clients"
+            />
           </div>
           <CardDescription>Sites ranked by user count</CardDescription>
         </CardHeader>
@@ -820,9 +849,19 @@ export function Dashboard() {
     return (
       <Card className="surface-2dp border-primary/10">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Activity className="h-5 w-5 text-primary" />
-            <CardTitle>Performance Metrics</CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              <CardTitle>Performance Metrics</CardTitle>
+            </div>
+            <SaveToWorkspace
+              widgetId="dashboard-performance-metrics"
+              widgetType="kpi_tile_group"
+              title="Performance Metrics"
+              endpointRefs={['network.performance_summary']}
+              sourcePage="dashboard"
+              catalogId="network_performance_kpi"
+            />
           </div>
           <CardDescription>Real-time network performance indicators</CardDescription>
         </CardHeader>

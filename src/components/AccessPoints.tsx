@@ -18,6 +18,7 @@ import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
 import { apiService, AccessPoint, APDetails, APStation, APQueryColumn, Site } from '../services/api';
 import { toast } from 'sonner';
+import { SaveToWorkspace } from './SaveToWorkspace';
 
 // Define available columns with friendly labels
 interface ColumnConfig {
@@ -1549,13 +1550,20 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         </Card>
       </div>
 
-      {/* E911 BSSID Export Panel - Compact */}
+      {/* E911 BSSID Live Sync Panel - Compact */}
       <Card className="border border-red-500/50 bg-gradient-to-r from-red-50/50 to-orange-50/50 dark:from-red-950/20 dark:to-orange-950/20">
         <CardContent className="py-2 px-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Phone className="h-4 w-4 text-red-500" />
-              <span className="font-medium text-sm">E911 BSSID Export</span>
+              <span className="font-medium text-sm">E911 BSSID</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 dark:bg-slate-800 text-emerald-400 text-xs font-semibold border border-emerald-500/30">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Live Sync
+              </span>
               <span className="text-xs text-muted-foreground">
                 ({filteredAccessPoints.length} APs)
               </span>
@@ -1603,7 +1611,17 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
       <Card className="surface-2dp">
         <CardHeader>
-          <CardTitle className="text-headline-6 text-high-emphasis">Access Points</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-headline-6 text-high-emphasis">Access Points</CardTitle>
+            <SaveToWorkspace
+              widgetId="access-points-table"
+              widgetType="topn_table"
+              title="All Access Points"
+              endpointRefs={['access_points.list']}
+              sourcePage="access-points"
+              catalogId="table_aps_all"
+            />
+          </div>
           <CardDescription>
             {selectedSite !== 'all' 
               ? `Access points in ${sites.find(s => s.id === selectedSite)?.name || 'selected site'}. Click any access point for details.`

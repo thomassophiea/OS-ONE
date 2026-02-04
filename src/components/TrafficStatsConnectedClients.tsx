@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Checkbox } from './ui/checkbox';
-import { AlertCircle, Users, Search, RefreshCw, Filter, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, Building, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileDown } from 'lucide-react';
+import { AlertCircle, Users, Search, RefreshCw, Filter, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, Building, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Settings2, Columns } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
@@ -17,7 +17,12 @@ import { apiService, Station } from '../services/api';
 import { trafficService } from '../services/traffic';
 import { identifyClient, lookupVendor, suggestDeviceType } from '../services/ouiLookup';
 import { isRandomizedMac, getMacAddressInfo } from '../services/macAddressUtils';
+import { resolveClientIdentity, type ClientIdentity } from '../lib/clientIdentity';
 import { toast } from 'sonner';
+import { SaveToWorkspace } from './SaveToWorkspace';
+import { useTableCustomization } from '../hooks/useTableCustomization';
+import { DetailSlideOut } from './DetailSlideOut';
+import { DEVICE_MONITORING_COLUMNS } from '../config/deviceMonitoringColumns';
 
 interface ConnectedClientsProps {
   onShowDetail?: (macAddress: string, hostName?: string) => void;
@@ -54,6 +59,41 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(100);
   const [totalItems, setTotalItems] = useState(0);
+
+  // Sorting state
+  type SortField = 'hostName' | 'macAddress' | 'ipAddress' | 'status' | 'apName' | 'ssid' | 'signalStrength' | 'band' | null;
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  // Column customization state
+  const [isColumnDialogOpen, setIsColumnDialogOpen] = useState(false);
+
+  // Column customization hook
+  const columnCustomization = useTableCustomization({
+    tableId: 'device-monitoring',
+    columns: DEVICE_MONITORING_COLUMNS,
+    storageKey: 'deviceMonitoringVisibleColumns',
+    enableViews: false,
+    enablePersistence: true
+  });
+
+  // Memoize stations with traffic data for column rendering
+  const stationsWithTraffic = useMemo(() => {
+    return stations.map(station => ({
+      ...station,
+      trafficData: stationTrafficData.get(station.macAddress)
+    }));
+  }, [stations, stationTrafficData]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   useEffect(() => {
     loadStations();
@@ -311,12 +351,62 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     return matchesSearch && matchesStatus && matchesAP && matchesSite && matchesDeviceType && matchesMacType;
   });
 
+  // Sort filtered stations
+  const sortedStations = [...filteredStations].sort((a, b) => {
+    if (!sortField) return 0;
+
+    let aValue: string | number = '';
+    let bValue: string | number = '';
+
+    switch (sortField) {
+      case 'hostName':
+        aValue = (a.hostName || a.macAddress || '').toLowerCase();
+        bValue = (b.hostName || b.macAddress || '').toLowerCase();
+        break;
+      case 'macAddress':
+        aValue = (a.macAddress || '').toLowerCase();
+        bValue = (b.macAddress || '').toLowerCase();
+        break;
+      case 'ipAddress':
+        // Sort IP addresses numerically
+        aValue = a.ipAddress ? a.ipAddress.split('.').map(n => n.padStart(3, '0')).join('') : '';
+        bValue = b.ipAddress ? b.ipAddress.split('.').map(n => n.padStart(3, '0')).join('') : '';
+        break;
+      case 'status':
+        aValue = (a.status || '').toLowerCase();
+        bValue = (b.status || '').toLowerCase();
+        break;
+      case 'apName':
+        aValue = (a.apName || '').toLowerCase();
+        bValue = (b.apName || '').toLowerCase();
+        break;
+      case 'ssid':
+        aValue = (a.ssid || a.network || '').toLowerCase();
+        bValue = (b.ssid || b.network || '').toLowerCase();
+        break;
+      case 'signalStrength':
+        aValue = a.signalStrength || a.rssi || -100;
+        bValue = b.signalStrength || b.rssi || -100;
+        break;
+      case 'band':
+        aValue = (a.band || '').toLowerCase();
+        bValue = (b.band || '').toLowerCase();
+        break;
+      default:
+        return 0;
+    }
+
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   // Pagination calculations
-  const totalFilteredItems = filteredStations.length;
+  const totalFilteredItems = sortedStations.length;
   const totalPages = Math.ceil(totalFilteredItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, totalFilteredItems);
-  const paginatedStations = filteredStations.slice(startIndex, endIndex);
+  const paginatedStations = sortedStations.slice(startIndex, endIndex);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -517,10 +607,12 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     }
   };
 
-  if (isLoading) {
+  // Only show skeleton on initial load (when there's no data yet)
+  // This prevents flashing on subsequent refreshes
+  if (isLoading && stations.length === 0) {
     return (
       <div className="space-y-6">
-        
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
@@ -533,7 +625,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
             </Card>
           ))}
         </div>
-        
+
         <Card>
           <CardHeader>
             <Skeleton className="h-6 w-32" />
@@ -560,9 +652,9 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={loadStations} variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+          <Button onClick={loadStations} variant="outline" size="sm" disabled={isLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            {isLoading ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
       </div>
@@ -672,11 +764,11 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
       </div>
 
       {/* GDPR Data Rights Panel - Compact */}
-      <Card className="border border-blue-500/50 bg-gradient-to-r from-blue-950/20 to-indigo-950/20">
+      <Card className="border bg-muted/30">
         <CardContent className="py-3 px-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-blue-400" />
+              <Shield className="h-4 w-4 text-muted-foreground" />
               <span className="font-medium text-sm">GDPR</span>
               <span className="text-xs text-muted-foreground">
                 {selectedStations.size > 0
@@ -687,7 +779,8 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white h-8"
+                variant="outline"
+                className="h-8"
                 onClick={handleDownloadClientData}
                 disabled={selectedStations.size === 0}
               >
@@ -769,7 +862,27 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
 
       <Card className="surface-2dp">
         <CardHeader>
-          <CardTitle>Device Monitoring & Traffic Analytics</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Device Monitoring & Traffic Analytics</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsColumnDialogOpen(true)}
+              >
+                <Columns className="mr-2 h-4 w-4" />
+                Customize Columns
+              </Button>
+              <SaveToWorkspace
+                widgetId="connected-clients-table"
+                widgetType="topn_table"
+                title="All Connected Clients"
+                endpointRefs={['clients.list']}
+                sourcePage="clients"
+                catalogId="table_clients_all"
+              />
+            </div>
+          </div>
           <CardDescription>
             Select clients using checkboxes to manage GDPR data rights. Click any client to view detailed connection information. Signal strength (RSS/RSSI) included.
           </CardDescription>
@@ -838,33 +951,89 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
               </p>
             </div>
           ) : (
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table className="text-[11px]">
                 <TableHeader>
                   <TableRow className="h-8">
-                    <TableHead className="w-12 p-2 text-[10px]">
+                    {/* Checkbox column - always visible */}
+                    <TableHead className="w-12 p-2 text-[10px] sticky left-0 bg-card z-10">
                       <Checkbox
                         checked={selectedStations.size === paginatedStations.length && paginatedStations.length > 0}
                         onCheckedChange={handleSelectAll}
                         className="h-3 w-3"
                       />
                     </TableHead>
-                    <TableHead className="w-20 p-2 text-[10px]">Status / Last Seen</TableHead>
-                    <TableHead className="w-28 p-2 text-[10px]">Client Info</TableHead>
-                    <TableHead className="w-32 p-2 text-[10px]">Device Info</TableHead>
-                    <TableHead className="w-28 p-2 text-[10px]">User & Network</TableHead>
-                    <TableHead className="w-28 p-2 text-[10px]">Access Point</TableHead>
-                    <TableHead className="w-20 p-2 text-[10px]">Band</TableHead>
-                    <TableHead className="w-24 p-2 text-[10px]">Signal Strength</TableHead>
-                    <TableHead className="w-32 p-2 text-[10px]">Traffic Statistics</TableHead>
+                    {/* Dynamic columns from customization */}
+                    {columnCustomization.visibleColumnConfigs.map((column) => (
+                      <TableHead
+                        key={column.key}
+                        className={`p-2 text-[10px] ${column.sortable ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                        onClick={() => {
+                          if (column.sortable) {
+                            const fieldMap: Record<string, SortField> = {
+                              'status': 'status',
+                              'hostname': 'hostName',
+                              'macAddress': 'macAddress',
+                              'ipAddress': 'ipAddress',
+                              'network': 'ssid',
+                              'apName': 'apName',
+                              'band': 'band',
+                              'rss': 'signalStrength'
+                            };
+                            const mappedField = fieldMap[column.key];
+                            if (mappedField) {
+                              handleSort(mappedField);
+                            }
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>{column.label}</span>
+                            </TooltipTrigger>
+                            {column.tooltip && (
+                              <TooltipContent>
+                                <p className="text-xs">{column.tooltip}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                          {column.sortable && (
+                            (() => {
+                              const fieldMap: Record<string, SortField> = {
+                                'status': 'status',
+                                'hostname': 'hostName',
+                                'macAddress': 'macAddress',
+                                'ipAddress': 'ipAddress',
+                                'network': 'ssid',
+                                'apName': 'apName',
+                                'band': 'band',
+                                'rss': 'signalStrength'
+                              };
+                              const mappedField = fieldMap[column.key];
+                              if (sortField === mappedField) {
+                                return sortDirection === 'asc'
+                                  ? <ArrowUp className="h-3 w-3" />
+                                  : <ArrowDown className="h-3 w-3" />;
+                              }
+                              return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
+                            })()
+                          )}
+                        </div>
+                      </TableHead>
+                    ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedStations.map((station, index) => {
-                    const trafficData = stationTrafficData.get(station.macAddress);
-                    
+                    // Merge station with traffic data for column rendering
+                    const stationWithTraffic = {
+                      ...station,
+                      trafficData: stationTrafficData.get(station.macAddress)
+                    };
+
                     return (
-                      <TableRow 
+                      <TableRow
                         key={station.macAddress || index}
                         className="cursor-pointer hover:bg-muted/50 h-10"
                         onClick={(e) => {
@@ -880,7 +1049,8 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                           }
                         }}
                       >
-                        <TableCell className="p-1" data-checkbox>
+                        {/* Checkbox cell - always visible */}
+                        <TableCell className="p-1 sticky left-0 bg-card z-10" data-checkbox>
                           <Checkbox
                             checked={selectedStations.has(station.macAddress)}
                             onCheckedChange={(checked) => handleStationSelect(station.macAddress, checked as boolean)}
@@ -888,227 +1058,12 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                             onClick={(e) => e.stopPropagation()}
                           />
                         </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <div className="space-y-0.5">
-                            {station.status ? (
-                              <Badge variant={getStatusBadgeVariant(station.status)} className="text-[9px] px-1 py-0 h-3 min-h-0">
-                                {station.status}
-                              </Badge>
-                            ) : (
-                              '-'
-                            )}
-                            {station.status?.toLowerCase() === 'disconnected' && station.lastSeen && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center gap-0.5 text-muted-foreground">
-                                    <Clock className="h-2 w-2 flex-shrink-0" />
-                                    <span className="text-[8px] leading-none">
-                                      {formatLastSeen(station.lastSeen)}
-                                    </span>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">Last seen: {new Date(station.lastSeen).toLocaleString()}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <div>
-                            <div className="flex items-center gap-1 mb-0.5">
-                              <span className="font-medium text-[12px] leading-none">
-                                {station.hostName || station.macAddress}
-                              </span>
-                              {isRandomizedMac(station.macAddress) && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Shuffle className="h-3 w-3 text-purple-500 flex-shrink-0" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="font-medium">Randomized MAC Address</p>
-                                    <p className="text-xs">Privacy feature - prevents device tracking</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                            {station.hostName && (
-                              <div className="font-mono text-[10px] text-muted-foreground leading-none mb-0.5">
-                                {station.macAddress}
-                              </div>
-                            )}
-                            <div className="font-mono text-[10px] text-muted-foreground leading-none">
-                              {station.ipAddress || 'No IP'}
-                            </div>
-                          </div>
-                        </TableCell>
-                        
-                        <TableCell className="p-0.5 w-16">
-                          <div className="space-y-0.5 max-w-16">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex items-center gap-0.5">
-                                  <MapPin className="h-2 w-2 text-muted-foreground flex-shrink-0" />
-                                  <span className="text-[9px] truncate leading-none">{station.siteName || '-'}</span>
-                                  {station.siteRating !== undefined && (
-                                    <>
-                                      <Star className="h-2 w-2 text-yellow-500 flex-shrink-0" />
-                                      <span className="text-[8px] leading-none">{station.siteRating}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>{station.siteName || '-'}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            {station.deviceType && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="text-[8px] h-2.5 px-1 py-0 max-w-14">
-                                    <span className="truncate">{station.deviceType}</span>
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{station.deviceType}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                            {station.manufacturer && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="text-[10px] text-muted-foreground leading-none truncate max-w-14">
-                                    {station.manufacturer}
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{station.manufacturer}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <div>
-                            {station.role && (
-                              <div className="text-[13px] text-muted-foreground leading-none mb-0.5">{station.role}</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <div>
-                            {(station.apName || station.apDisplayName || station.apHostname || station.accessPointName) && (
-                              <div className="text-[12px] font-medium leading-none mb-0.5 truncate">
-                                {station.apName || station.apDisplayName || station.apHostname || station.accessPointName}
-                              </div>
-                            )}
-                            {station.apSerial && (
-                              <div className="font-mono text-[8px] text-muted-foreground truncate leading-none mb-0.5">
-                                {station.apSerial}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-0.5">
-                              <Clock className="h-2 w-2 text-muted-foreground flex-shrink-0" />
-                              <span className="text-[10px] leading-none">{station.lastSeen || '-'}</span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all duration-200 hover:scale-105 ${getBandFromRadioId(station.radioId || station.radio)?.bgColor || 'bg-muted/10'}`}>
-                                <Radio className={`h-2 w-2 ${getBandFromRadioId(station.radioId || station.radio)?.color || 'text-muted-foreground'}`} />
-                                <span className={`text-[10px] font-medium ${getBandFromRadioId(station.radioId || station.radio)?.color || 'text-muted-foreground'}`}>
-                                  {getBandFromRadioId(station.radioId || station.radio)?.band || 'Unknown'}
-                                </span>
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Radio Band: {getBandFromRadioId(station.radioId || station.radio)?.band || 'Unknown'}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          {(() => {
-                            const trafficData = stationTrafficData.get(station.macAddress);
-                            const rssValue = trafficData?.rss ?? station.rss ?? station.signalStrength;
-                            const radioId = station.radioId || station.radio;
-                            const signalInfo = getSignalStrengthIndicator(rssValue, radioId);
-                            const SignalIcon = signalInfo.icon;
-                            
-                            return (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all duration-200 hover:scale-105 ${signalInfo.bgColor}`}>
-                                    <SignalIcon className={`h-2 w-2 ${signalInfo.color}`} />
-                                    <span className={`text-[10px] font-medium ${signalInfo.color}`}>
-                                      {radioId === 20 ? signalInfo.label : (rssValue !== undefined ? `${rssValue}` : '-')}
-                                    </span>
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <div className="text-center">
-                                    <p className="font-medium">{signalInfo.quality}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {radioId === 20 
-                                        ? 'Physical ethernet connection'
-                                        : (rssValue !== undefined ? `${rssValue} dBm` : 'No signal data')
-                                      }
-                                    </p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })()}
-                        </TableCell>
-                        
-                        <TableCell className="p-1">
-                          <div className="space-y-0.5">
-                            {trafficData ? (
-                              <>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-1">
-                                      <Download className="h-2 w-2 text-green-500" />
-                                      <span className="text-[10px] text-green-600 font-medium">
-                                        {formatBytes(trafficData.inBytes || 0)}
-                                      </span>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Inbound: {formatBytes(trafficData.inBytes || 0)}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-1">
-                                      <Upload className="h-2 w-2 text-blue-500" />
-                                      <span className="text-[10px] text-blue-600 font-medium">
-                                        {formatBytes(trafficData.outBytes || 0)}
-                                      </span>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Outbound: {formatBytes(trafficData.outBytes || 0)}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </>
-                            ) : isLoadingTraffic ? (
-                              <div className="flex items-center gap-1">
-                                <div className="animate-spin h-2 w-2 border border-muted-foreground border-t-transparent rounded-full"></div>
-                                <span className="text-[8px] text-muted-foreground">Loading...</span>
-                              </div>
-                            ) : (
-                              <div className="text-[8px] text-muted-foreground">No data</div>
-                            )}
-                          </div>
-                        </TableCell>
+                        {/* Dynamic cells from visible columns */}
+                        {columnCustomization.visibleColumnConfigs.map((column) => (
+                          <TableCell key={column.key} className="p-1">
+                            {column.renderCell ? column.renderCell(stationWithTraffic, index) : '-'}
+                          </TableCell>
+                        ))}
                       </TableRow>
                     );
                   })}
@@ -1199,6 +1154,146 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
           )}
         </CardContent>
       </Card>
+
+      {/* Column Customization Slide-Out */}
+      <DetailSlideOut
+        isOpen={isColumnDialogOpen}
+        onClose={() => setIsColumnDialogOpen(false)}
+        title="Customize Table Columns"
+        description="Select which columns you want to display in the Connected Clients table"
+        width="lg"
+      >
+        <div className="space-y-6">
+          {/* Basic Columns */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Basic Information</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {DEVICE_MONITORING_COLUMNS.filter(col => col.category === 'basic').map(column => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={columnCustomization.visibleColumns.includes(column.key)}
+                    onCheckedChange={() => columnCustomization.toggleColumn(column.key)}
+                    disabled={column.lockVisible}
+                  />
+                  <label
+                    htmlFor={`col-${column.key}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {column.label}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Network Columns */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Network</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {DEVICE_MONITORING_COLUMNS.filter(col => col.category === 'network').map(column => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={columnCustomization.visibleColumns.includes(column.key)}
+                    onCheckedChange={() => columnCustomization.toggleColumn(column.key)}
+                  />
+                  <label
+                    htmlFor={`col-${column.key}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {column.label}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Connection Columns */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Connection</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {DEVICE_MONITORING_COLUMNS.filter(col => col.category === 'connection').map(column => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={columnCustomization.visibleColumns.includes(column.key)}
+                    onCheckedChange={() => columnCustomization.toggleColumn(column.key)}
+                  />
+                  <label
+                    htmlFor={`col-${column.key}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {column.label}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Performance Columns */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Performance</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {DEVICE_MONITORING_COLUMNS.filter(col => col.category === 'performance').map(column => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={columnCustomization.visibleColumns.includes(column.key)}
+                    onCheckedChange={() => columnCustomization.toggleColumn(column.key)}
+                  />
+                  <label
+                    htmlFor={`col-${column.key}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {column.label}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Advanced Columns */}
+          <div>
+            <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Advanced</h3>
+            <div className="grid grid-cols-2 gap-3">
+              {DEVICE_MONITORING_COLUMNS.filter(col => col.category === 'advanced').map(column => (
+                <div key={column.key} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`col-${column.key}`}
+                    checked={columnCustomization.visibleColumns.includes(column.key)}
+                    onCheckedChange={() => columnCustomization.toggleColumn(column.key)}
+                  />
+                  <label
+                    htmlFor={`col-${column.key}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {column.label}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Actions */}
+          <div className="flex items-center justify-between pt-4 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => columnCustomization.resetColumns()}
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reset to Defaults
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              {columnCustomization.visibleColumns.length} of {DEVICE_MONITORING_COLUMNS.length} columns selected
+            </div>
+            <Button onClick={() => setIsColumnDialogOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      </DetailSlideOut>
     </div>
   );
 }
