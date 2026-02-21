@@ -102,7 +102,7 @@ export function ApplicationEndpointTester() {
   const successfulEndpoints = results.filter(r => r.status === 'success');
 
   return (
-    <Card className="border-2 border-yellow-500">
+    <Card className="border-2 border-amber-500">
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
@@ -186,7 +186,7 @@ export function ApplicationEndpointTester() {
         {!testing && results.length > 0 && successfulEndpoints.length === 0 && (
           <div className="mt-4 p-4 bg-red-500/10 border border-red-500 rounded-lg">
             <p className="text-sm text-red-700 dark:text-red-400">
-              No working endpoints found. Extreme Platform ONE may not have an application analytics API available.
+              No working endpoints found. The controller may not have an application analytics API available.
             </p>
           </div>
         )}

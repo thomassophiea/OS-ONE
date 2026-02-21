@@ -167,7 +167,7 @@ interface Notification {
 
 function DashboardEnhancedComponent() {
   // Global filters for site/time filtering
-  const { filters } = useGlobalFilters();
+  const { filters, updateFilter } = useGlobalFilters();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -284,6 +284,15 @@ function DashboardEnhancedComponent() {
     status: 'resolved' | 'in-progress' | 'monitoring' | 'stable' | 'requires-action';
     entityNames?: string[];
   } | null>(null);
+
+  // Sync operational context siteId to global filters on mount/change
+  useEffect(() => {
+    if (operationalCtx.mode === 'SITE' && operationalCtx.siteId) {
+      if (filters.site !== operationalCtx.siteId) {
+        updateFilter('site', operationalCtx.siteId);
+      }
+    }
+  }, [operationalCtx.siteId, operationalCtx.mode]);
 
   useEffect(() => {
     loadDashboardData();
@@ -452,19 +461,38 @@ function DashboardEnhancedComponent() {
     console.log('[Dashboard] Fetching stations' + (siteFilter ? ` for site: ${siteFilter}` : ''));
 
     try {
-      // If site is selected, use site-specific endpoint
+      // If site is selected, use site-specific endpoint with client-side fallback
       if (siteFilter) {
-        const response = await apiService.makeAuthenticatedRequest(`/v3/sites/${siteFilter}/stations`, { method: 'GET' }, 15000);
+        // Try site-scoped API first
+        try {
+          const response = await apiService.makeAuthenticatedRequest(`/v3/sites/${siteFilter}/stations`, { method: 'GET' }, 15000);
+          if (response.ok) {
+            const data = await response.json();
+            const stations = Array.isArray(data) ? data : (data.stations || data.clients || data.data || []);
+            console.log('[Dashboard] Fetched', stations.length, 'stations for site (API-scoped)');
+            return stations;
+          }
+        } catch { /* fall through to client-side filter */ }
 
-        if (!response.ok) {
-          throw new Error(`API returned ${response.status}`);
-        }
+        // STRICT: Client-side fallback - filter all stations by site name/ID
+        try {
+          const site = await apiService.getSiteById(siteFilter);
+          const siteName = site?.name || site?.siteName || siteFilter;
 
-        const data = await response.json();
-        const stations = Array.isArray(data) ? data : (data.stations || data.clients || data.data || []);
+          const response = await apiService.makeAuthenticatedRequest('/v1/stations', { method: 'GET' }, 15000);
+          if (response.ok) {
+            const data = await response.json();
+            const allStations = Array.isArray(data) ? data : (data.stations || data.clients || data.data || []);
+            const filtered = allStations.filter((s: any) =>
+              s.siteName === siteName || s.siteId === siteFilter || s.siteName === siteFilter
+            );
+            console.log('[Dashboard] Filtered', filtered.length, '/', allStations.length, 'stations for site (client-side)');
+            return filtered;
+          }
+        } catch { /* fall through */ }
 
-        console.log('[Dashboard] Fetched', stations.length, 'stations for site');
-        return stations;
+        console.warn('[Dashboard] Station fetch failed for site, returning empty (strict mode)');
+        return []; // STRICT: empty on failure when site-scoped
       } else {
         // Get all stations
         const response = await apiService.makeAuthenticatedRequest('/v1/stations', { method: 'GET' }, 15000);
@@ -486,18 +514,54 @@ function DashboardEnhancedComponent() {
   };
 
   const fetchServices = async (): Promise<Service[]> => {
-    console.log('[Dashboard] Fetching services from /v1/services...');
-    
+    const siteFilter = filters.site !== 'all' ? filters.site : undefined;
+    console.log('[Dashboard] Fetching services' + (siteFilter ? ` for site: ${siteFilter}` : ''));
+
     try {
+      // STRICT: Use site-specific services if site is selected
+      if (siteFilter) {
+        try {
+          const services = await apiService.getServicesBySite(siteFilter);
+          if (services.length > 0) {
+            console.log('[Dashboard] Fetched', services.length, 'services for site');
+            return services;
+          }
+        } catch {
+          // Fall through to client-side filter only
+        }
+
+        // STRICT: Client-side filter as last resort, but NEVER return unfiltered global data
+        try {
+          const response = await apiService.makeAuthenticatedRequest('/v1/services', { method: 'GET' }, 15000);
+          if (response.ok) {
+            const data = await response.json();
+            const allServices = Array.isArray(data) ? data : (data.services || data.data || []);
+            const site = await apiService.getSiteById(siteFilter);
+            const siteName = site?.name || site?.siteName || siteFilter;
+            const filtered = allServices.filter((s: any) =>
+              s.siteName === siteName ||
+              s.site === siteFilter ||
+              s.site === siteName ||
+              s.location === siteName
+            );
+            console.log('[Dashboard] Filtered', filtered.length, 'services for site (client-side)');
+            return filtered; // STRICT: return filtered even if empty
+          }
+        } catch {
+          // Fall through
+        }
+
+        console.warn('[Dashboard] Service fetch failed for site, returning empty (strict mode)');
+        return []; // STRICT: empty on failure when site-scoped
+      }
+
+      // No site filter: return all services
       const response = await apiService.makeAuthenticatedRequest('/v1/services', { method: 'GET' }, 15000);
-      
       if (!response.ok) {
         throw new Error(`API returned ${response.status}`);
       }
-
       const data = await response.json();
       const services = Array.isArray(data) ? data : (data.services || data.data || []);
-      
       console.log('[Dashboard] Fetched', services.length, 'services');
       return services;
     } catch (error) {
@@ -507,29 +571,55 @@ function DashboardEnhancedComponent() {
   };
 
   const fetchNotifications = async (): Promise<Notification[]> => {
-    console.log('[Dashboard] Fetching notifications from /v1/notifications...');
-    
+    const siteFilter = filters.site !== 'all' ? filters.site : undefined;
+    console.log('[Dashboard] Fetching notifications' + (siteFilter ? ` for site: ${siteFilter}` : ''));
+
     try {
       const response = await apiService.makeAuthenticatedRequest('/v1/notifications', { method: 'GET' }, 10000);
-      
+
       if (!response.ok) {
         // Try alternative endpoint
         const altResponse = await apiService.makeAuthenticatedRequest('/v1/alerts', { method: 'GET' }, 10000);
         if (altResponse.ok) {
           const altData = await altResponse.json();
-          return Array.isArray(altData) ? altData : (altData.alerts || altData.data || []);
+          const allNotifs = Array.isArray(altData) ? altData : (altData.alerts || altData.data || []);
+          return siteFilter ? await filterNotificationsBySite(allNotifs, siteFilter) : allNotifs;
         }
         throw new Error(`API returned ${response.status}`);
       }
 
       const data = await response.json();
-      const notifications = Array.isArray(data) ? data : (data.notifications || data.data || []);
-      
-      console.log('[Dashboard] Fetched', notifications.length, 'notifications');
+      const allNotifs = Array.isArray(data) ? data : (data.notifications || data.data || []);
+
+      // STRICT: filter by site device correlation when site-scoped
+      const notifications = siteFilter ? await filterNotificationsBySite(allNotifs, siteFilter) : allNotifs;
+      console.log('[Dashboard] Fetched', notifications.length, 'notifications' + (siteFilter ? ' (site-scoped)' : ''));
       return notifications;
     } catch (error) {
       console.log('[Dashboard] Notifications not available:', error);
       return [];
+    }
+  };
+
+  // STRICT: Filter notifications by AP-site device correlation
+  const filterNotificationsBySite = async (notifications: Notification[], siteId: string): Promise<Notification[]> => {
+    try {
+      const siteAPs = await apiService.getAccessPointsBySite(siteId);
+      const deviceIds = new Set<string>();
+      siteAPs.forEach(ap => {
+        if (ap.name) deviceIds.add(ap.name.toLowerCase());
+        if (ap.serialNumber) deviceIds.add(ap.serialNumber.toLowerCase());
+        if ((ap as any).hostname) deviceIds.add((ap as any).hostname.toLowerCase());
+        if ((ap as any).macAddress) deviceIds.add((ap as any).macAddress.toLowerCase());
+      });
+      if (deviceIds.size === 0) return []; // STRICT: no devices = no notifications
+      return notifications.filter(n => {
+        const source = ((n as any).source || '').toLowerCase();
+        const device = ((n as any).deviceName || (n as any).device || '').toLowerCase();
+        return deviceIds.has(source) || deviceIds.has(device);
+      });
+    } catch {
+      return []; // STRICT: empty on failure
     }
   };
 
@@ -848,8 +938,8 @@ function DashboardEnhancedComponent() {
     const serviceIdToNameMapLocal = new Map<string, string>();
     servicesData.forEach(service => {
       if (service.id) {
-        // Prefer SSID over name, then name, as SSID is more recognizable to users
-        const displayName = service.ssid || service.name || service.id;
+        // Prefer SSID over name, then serviceName, then name, as SSID is most recognizable
+        const displayName = service.ssid || service.serviceName || service.name || service.id;
         serviceIdToNameMapLocal.set(service.id, displayName);
       }
     });
@@ -920,12 +1010,17 @@ function DashboardEnhancedComponent() {
       totalDownload += rx;
 
       // Track by service - try multiple fields to identify the service/network
-      // Priority: 1) SSID (most user-friendly), 2) serviceName, 3) lookup serviceId in map, 4) raw serviceId, 5) 'Unknown'
-      let serviceName = station.ssid || station.serviceName;
+      // Priority: 1) SSID, 2) essid, 3) serviceName, 4) network/networkName/profileName, 5) lookup serviceId, 6) 'Unknown'
+      let serviceName = station.ssid || station.essid || station.serviceName || station.network || station.networkName || station.profileName;
 
       if (!serviceName && station.serviceId) {
         // Try to resolve serviceId to a friendly name using the services lookup
-        serviceName = serviceIdToNameMapLocal.get(station.serviceId) || station.serviceId;
+        serviceName = serviceIdToNameMapLocal.get(station.serviceId) || undefined;
+      }
+
+      // If still no name and we have a UUID-like serviceId, show 'Unknown Service' instead
+      if (!serviceName && station.serviceId) {
+        serviceName = station.serviceId.length > 20 ? 'Unknown Service' : station.serviceId;
       }
 
       serviceName = serviceName || 'Unknown';
@@ -1281,12 +1376,14 @@ function DashboardEnhancedComponent() {
 
   // Helper function to get service name for a station (must match logic in processStations)
   const getServiceNameForStation = (station: Station): string => {
-    // Priority: 1) SSID (most user-friendly), 2) serviceName, 3) lookup serviceId in map, 4) raw serviceId, 5) 'Unknown'
-    let serviceName = station.ssid || station.serviceName;
+    let serviceName = station.ssid || station.essid || station.serviceName || station.network || station.networkName || station.profileName;
 
     if (!serviceName && station.serviceId) {
-      // Try to resolve serviceId to a friendly name using the services lookup
-      serviceName = serviceIdToNameMap.get(station.serviceId) || station.serviceId;
+      serviceName = serviceIdToNameMap.get(station.serviceId) || undefined;
+    }
+
+    if (!serviceName && station.serviceId) {
+      serviceName = station.serviceId.length > 20 ? 'Unknown Service' : station.serviceId;
     }
 
     return serviceName || 'Unknown';
@@ -1415,11 +1512,22 @@ function DashboardEnhancedComponent() {
               setSelectorTab(tab);
               setSelectedEntityId(null);
               setSelectedEntityName(null);
+              // Reset site filter when switching away from site-scoped views
+              if (tab === 'ai-insights') {
+                updateFilter('site', 'all');
+              }
             }}
             onSelectionChange={(tab, id, name) => {
               setSelectedEntityId(id);
               setSelectedEntityName(name || null);
               console.log('[Dashboard] Selection changed:', { tab, id, name });
+              // Sync site selection to global filters so all data fetching is site-scoped
+              if (tab === 'site' && id) {
+                updateFilter('site', id);
+              } else if (tab === 'site' && !id) {
+                // "All Sites" selected - reset to global view
+                updateFilter('site', 'all');
+              }
             }}
           />
           <FilterBar
@@ -1444,25 +1552,39 @@ function DashboardEnhancedComponent() {
         <div className="space-y-4">
           {/* Quick Stats Overview - Always at top */}
           <div className="grid gap-4 md:grid-cols-4">
-            <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => { setSelectorTab('access-point'); }}>
+            <Card
+              className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20 hover:shadow-lg transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+              onClick={() => { setSelectorTab('access-point'); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectorTab('access-point'); }}}
+              role="button"
+              tabIndex={0}
+              aria-label="View Access Points details"
+            >
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Total Access Points</p>
                     <p className="text-2xl font-bold">{apStats.total}</p>
-                    <p className="text-xs text-green-600">{apStats.online} online</p>
+                    <p className="text-xs text-green-500">{apStats.online} online</p>
                   </div>
                   <Wifi className="h-8 w-8 text-blue-500/50" />
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/20 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => { setSelectorTab('client'); }}>
+            <Card
+              className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-violet-500/20 hover:shadow-lg transition-shadow cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50"
+              onClick={() => { setSelectorTab('client'); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectorTab('client'); }}}
+              role="button"
+              tabIndex={0}
+              aria-label="View Connected Clients details"
+            >
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Connected Clients</p>
                     <p className="text-2xl font-bold">{clientStats.total}</p>
-                    <p className="text-xs text-green-600">{clientStats.authenticated} authenticated</p>
+                    <p className="text-xs text-green-500">{clientStats.authenticated} authenticated</p>
                   </div>
                   <Users className="h-8 w-8 text-violet-500/50" />
                 </div>
@@ -1487,7 +1609,7 @@ function DashboardEnhancedComponent() {
                     <p className="text-sm text-muted-foreground">Active Alerts</p>
                     <p className="text-2xl font-bold">{alertCounts.critical + alertCounts.warning}</p>
                     <p className="text-xs">
-                      <span className="text-red-600">{alertCounts.critical} critical</span>
+                      <span className="text-red-500">{alertCounts.critical} critical</span>
                       {alertCounts.warning > 0 && <span className="text-amber-600 ml-2">{alertCounts.warning} warning</span>}
                     </p>
                   </div>
@@ -1504,7 +1626,7 @@ function DashboardEnhancedComponent() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div className="p-2 rounded-lg bg-green-500/10">
-                    <Activity className="h-5 w-5 text-green-600" />
+                    <Activity className="h-5 w-5 text-green-500" />
                   </div>
                   <div>
                     <CardTitle className="text-base">Network Health</CardTitle>
@@ -1641,27 +1763,27 @@ function DashboardEnhancedComponent() {
               <CardContent className="space-y-3">
                 {apStats.offline > 0 && (
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <WifiOff className="h-5 w-5 text-red-600 mt-0.5" />
+                    <WifiOff className="h-5 w-5 text-red-500 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-red-600">Offline Access Points</p>
+                      <p className="text-sm font-medium text-red-500">Offline Access Points</p>
                       <p className="text-xs text-muted-foreground">{apStats.offline} AP(s) are currently offline and require attention</p>
                     </div>
                   </div>
                 )}
                 {alertCounts.critical > 0 && (
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                    <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-red-600">Critical Alerts</p>
+                      <p className="text-sm font-medium text-red-500">Critical Alerts</p>
                       <p className="text-xs text-muted-foreground">{alertCounts.critical} critical issue(s) need immediate attention</p>
                     </div>
                   </div>
                 )}
                 {apStats.offline === 0 && alertCounts.critical === 0 && (
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-green-600">All Clear</p>
+                      <p className="text-sm font-medium text-green-500">All Clear</p>
                       <p className="text-xs text-muted-foreground">No anomalies detected - network operating normally</p>
                     </div>
                   </div>
@@ -1706,9 +1828,9 @@ function DashboardEnhancedComponent() {
                 )}
                 {apStats.lowPower === 0 && poorServices.length === 0 && (
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                    <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-green-600">Systems Healthy</p>
+                      <p className="text-sm font-medium text-green-500">Systems Healthy</p>
                       <p className="text-xs text-muted-foreground">No maintenance issues predicted in the near term</p>
                     </div>
                   </div>
@@ -1801,7 +1923,7 @@ function DashboardEnhancedComponent() {
                 {apStats.offline === 0 && alertCounts.critical === 0 && alertCounts.warning === 0 && (
                   <div className="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20">
                     <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span className="text-sm text-green-600">No issues detected - all systems operational</span>
+                    <span className="text-sm text-green-500">No issues detected - all systems operational</span>
                   </div>
                 )}
               </div>
@@ -1982,7 +2104,7 @@ function DashboardEnhancedComponent() {
                         onClick={() => { setAiActiveHealthTab('needsAttention'); setSelectedNetworkEvent(null); }}
                         className={`pb-2 px-3 transition-colors border-b-2 ${
                           aiActiveHealthTab === 'needsAttention' && !selectedNetworkEvent
-                            ? 'text-red-600 border-red-600'
+                            ? 'text-red-500 border-red-500'
                             : 'text-muted-foreground border-transparent hover:text-foreground'
                         }`}
                       >
@@ -2002,7 +2124,7 @@ function DashboardEnhancedComponent() {
                         onClick={() => { setAiActiveHealthTab('healthy'); setSelectedNetworkEvent(null); }}
                         className={`pb-2 px-3 transition-colors border-b-2 ${
                           aiActiveHealthTab === 'healthy' && !selectedNetworkEvent
-                            ? 'text-green-600 border-green-600'
+                            ? 'text-green-500 border-green-500'
                             : 'text-muted-foreground border-transparent hover:text-foreground'
                         }`}
                       >
@@ -2298,7 +2420,7 @@ function DashboardEnhancedComponent() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-muted-foreground">{apStats.offline} APs</td>
                                     <td className="px-4 py-3">
-                                      <span className="inline-flex items-center px-2 py-1 rounded text-xs text-red-600 bg-red-50">Requires Action</span>
+                                      <span className="inline-flex items-center px-2 py-1 rounded text-xs text-red-500 bg-red-50">Requires Action</span>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-muted-foreground max-w-md">AI detected {apStats.offline} access point(s) are offline. Check network connectivity, PoE power delivery, or hardware status.</td>
                                     <td className="px-4 py-3">
@@ -2331,7 +2453,7 @@ function DashboardEnhancedComponent() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-muted-foreground">{alertCounts.critical} alerts</td>
                                     <td className="px-4 py-3">
-                                      <span className="inline-flex items-center px-2 py-1 rounded text-xs text-red-600 bg-red-50">Critical</span>
+                                      <span className="inline-flex items-center px-2 py-1 rounded text-xs text-red-500 bg-red-50">Critical</span>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-muted-foreground max-w-md">Multiple critical alerts require immediate attention to prevent service degradation.</td>
                                     <td className="px-4 py-3">
@@ -2407,7 +2529,7 @@ function DashboardEnhancedComponent() {
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground">{apStats.online} APs</td>
                                   <td className="px-4 py-3">
-                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-600 bg-green-50">Stable</span>
+                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-500 bg-green-50">Stable</span>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground max-w-md">All {apStats.online} access points are operational with normal performance metrics.</td>
                                   <td className="px-4 py-3">
@@ -2429,7 +2551,7 @@ function DashboardEnhancedComponent() {
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground">{clientStats.authenticated} clients</td>
                                   <td className="px-4 py-3">
-                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-600 bg-green-50">Stable</span>
+                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-500 bg-green-50">Stable</span>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground max-w-md">All authenticated clients have stable connections with good signal quality.</td>
                                   <td className="px-4 py-3">
@@ -2451,7 +2573,7 @@ function DashboardEnhancedComponent() {
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground">{formatBps(clientStats.throughputUpload + clientStats.throughputDownload)}</td>
                                   <td className="px-4 py-3">
-                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-600 bg-green-50">Optimal</span>
+                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs text-green-500 bg-green-50">Optimal</span>
                                   </td>
                                   <td className="px-4 py-3 text-sm text-muted-foreground max-w-md">Network throughput is within normal parameters with no congestion detected.</td>
                                   <td className="px-4 py-3">
@@ -2725,12 +2847,12 @@ function DashboardEnhancedComponent() {
             <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{apStats.total}</div>
             <div className="flex flex-col gap-1.5 mt-2">
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                <Badge variant="outline" className="text-green-500 border-green-500 text-xs">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   {apStats.online} Online
                 </Badge>
                 {apStats.offline > 0 && (
-                  <Badge variant="outline" className="text-red-600 border-red-600 text-xs">
+                  <Badge variant="outline" className="text-red-500 border-red-500 text-xs">
                     <WifiOff className="h-3 w-3 mr-1" />
                     {apStats.offline} Offline
                   </Badge>
@@ -2742,7 +2864,7 @@ function DashboardEnhancedComponent() {
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Status</span>
-                <span className="font-medium text-green-600">{apStats.offline === 0 ? 'Optimal' : 'Check Required'}</span>
+                <span className="font-medium text-green-500">{apStats.offline === 0 ? 'Optimal' : 'Check Required'}</span>
               </div>
               {Object.keys(apStats.models).length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border">
@@ -2785,8 +2907,8 @@ function DashboardEnhancedComponent() {
                 <span className="font-medium">{clientStats.total > 0 ? Math.round((clientStats.authenticated / clientStats.total) * 100) : 0}%</span>
               </div>
               <div className="flex items-center gap-1 text-xs">
-                <TrendingUp className="h-3 w-3 text-green-600" />
-                <span className="text-green-600 font-medium">Active</span>
+                <TrendingUp className="h-3 w-3 text-green-500" />
+                <span className="text-green-500 font-medium">Active</span>
               </div>
             </div>
           </CardContent>
@@ -2823,7 +2945,7 @@ function DashboardEnhancedComponent() {
                   <TrendingDown className="h-3 w-3" />
                   <span title="Download throughput in Mbps/Gbps">Download</span>
                 </div>
-                <div className="font-medium text-green-600">{formatBps(clientStats.throughputDownload)}</div>
+                <div className="font-medium text-green-500">{formatBps(clientStats.throughputDownload)}</div>
               </div>
             </div>
 
@@ -2895,12 +3017,12 @@ function DashboardEnhancedComponent() {
               {alertCounts.critical === 0 && alertCounts.warning === 0 ? (
                 <div className="space-y-1">
                   <div className="flex items-center gap-1 text-xs">
-                    <CheckCircle className="h-3 w-3 text-green-600" />
-                    <span className="text-green-600 font-medium">All systems normal</span>
+                    <CheckCircle className="h-3 w-3 text-green-500" />
+                    <span className="text-green-500 font-medium">All systems normal</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Status</span>
-                    <span className="font-medium text-green-600">Optimal</span>
+                    <span className="font-medium text-green-500">Optimal</span>
                   </div>
                 </div>
               ) : (
@@ -2943,8 +3065,8 @@ function DashboardEnhancedComponent() {
                     <span className="text-sm font-medium">Latency</span>
                   </div>
                   <span className={`text-sm font-bold ${
-                    performanceMetrics.latency < 20 ? 'text-green-600' :
-                    performanceMetrics.latency < 50 ? 'text-yellow-600' : 'text-red-600'
+                    performanceMetrics.latency < 20 ? 'text-green-500' :
+                    performanceMetrics.latency < 50 ? 'text-amber-500' : 'text-red-500'
                   }`}>
                     {performanceMetrics.latency.toFixed(1)} ms
                   </span>
@@ -2966,8 +3088,8 @@ function DashboardEnhancedComponent() {
                     <span className="text-sm font-medium">Packet Loss</span>
                   </div>
                   <span className={`text-sm font-bold ${
-                    performanceMetrics.packetLoss < 0.5 ? 'text-green-600' :
-                    performanceMetrics.packetLoss < 2 ? 'text-yellow-600' : 'text-red-600'
+                    performanceMetrics.packetLoss < 0.5 ? 'text-green-500' :
+                    performanceMetrics.packetLoss < 2 ? 'text-amber-500' : 'text-red-500'
                   }`}>
                     {performanceMetrics.packetLoss.toFixed(3)}%
                   </span>
@@ -2993,8 +3115,8 @@ function DashboardEnhancedComponent() {
                     <span className="text-sm font-medium">Signal Strength (RSSI)</span>
                   </div>
                   <span className={`text-sm font-bold ${
-                    performanceMetrics.avgRssi >= -50 ? 'text-green-600' :
-                    performanceMetrics.avgRssi >= -70 ? 'text-yellow-600' : 'text-red-600'
+                    performanceMetrics.avgRssi >= -50 ? 'text-green-500' :
+                    performanceMetrics.avgRssi >= -70 ? 'text-amber-500' : 'text-red-500'
                   }`}>
                     {performanceMetrics.avgRssi.toFixed(0)} dBm
                   </span>
@@ -3021,8 +3143,8 @@ function DashboardEnhancedComponent() {
                     <span className="text-sm font-medium">Signal Quality (SNR)</span>
                   </div>
                   <span className={`text-sm font-bold ${
-                    performanceMetrics.avgSnr >= 40 ? 'text-green-600' :
-                    performanceMetrics.avgSnr >= 25 ? 'text-yellow-600' : 'text-red-600'
+                    performanceMetrics.avgSnr >= 40 ? 'text-green-500' :
+                    performanceMetrics.avgSnr >= 25 ? 'text-amber-500' : 'text-red-500'
                   }`}>
                     {performanceMetrics.avgSnr.toFixed(0)} dB
                   </span>
@@ -3048,8 +3170,8 @@ function DashboardEnhancedComponent() {
                     <span className="text-sm font-medium">Success Rate</span>
                   </div>
                   <span className={`text-sm font-bold ${
-                    performanceMetrics.authenticatedRate >= 98 ? 'text-green-600' :
-                    performanceMetrics.authenticatedRate >= 95 ? 'text-yellow-600' : 'text-red-600'
+                    performanceMetrics.authenticatedRate >= 98 ? 'text-green-500' :
+                    performanceMetrics.authenticatedRate >= 95 ? 'text-amber-500' : 'text-red-500'
                   }`}>
                     {performanceMetrics.authenticatedRate.toFixed(2)}%
                   </span>
@@ -3156,16 +3278,16 @@ function DashboardEnhancedComponent() {
                       <Zap className="h-4 w-4 text-green-500" />
                       <span className="text-sm">Normal Power</span>
                     </div>
-                    <div className="text-sm font-medium text-green-600">
+                    <div className="text-sm font-medium text-green-500">
                       {apStats.normalPower} ({apStats.total > 0 ? Math.round((apStats.normalPower / apStats.total) * 100) : 0}%)
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-yellow-500" />
+                      <Zap className="h-4 w-4 text-amber-500" />
                       <span className="text-sm">Low Power</span>
                     </div>
-                    <div className="text-sm font-medium text-yellow-600">
+                    <div className="text-sm font-medium text-amber-500">
                       {apStats.lowPower} ({apStats.total > 0 ? Math.round((apStats.lowPower / apStats.total) * 100) : 0}%)
                     </div>
                   </div>
@@ -3442,10 +3564,10 @@ function DashboardEnhancedComponent() {
 
       {/* Poor Services Alert */}
       {poorServices.length > 0 && (
-        <Card className="border-yellow-500">
+        <Card className="border-amber-500">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
               Services Requiring Attention
             </CardTitle>
             <CardDescription>Services with degraded performance</CardDescription>
@@ -3453,7 +3575,7 @@ function DashboardEnhancedComponent() {
           <CardContent>
             <div className="space-y-3">
               {poorServices.map(service => (
-                <div key={service.id} className="flex items-center justify-between p-3 rounded-lg border border-yellow-500/50 bg-yellow-500/5">
+                <div key={service.id} className="flex items-center justify-between p-3 rounded-lg border border-amber-500/50 bg-amber-500/5">
                   <div>
                     <div className="font-medium">{service.name}</div>
                     <div className="text-sm text-muted-foreground">
@@ -3465,7 +3587,7 @@ function DashboardEnhancedComponent() {
                       )}
                     </div>
                   </div>
-                  <Badge variant="outline" className="border-yellow-500 text-yellow-600">
+                  <Badge variant="outline" className="border-amber-500 text-amber-500">
                     Degraded
                   </Badge>
                 </div>
@@ -3502,14 +3624,14 @@ function DashboardEnhancedComponent() {
                     key={notif.id} 
                     className={`flex items-start gap-3 p-3 rounded-lg border ${
                       isCritical ? 'border-red-500/50 bg-red-500/5' : 
-                      isWarning ? 'border-yellow-500/50 bg-yellow-500/5' : 
+                      isWarning ? 'border-amber-500/50 bg-amber-500/5' : 
                       'border-border'
                     }`}
                   >
                     {isCritical ? (
                       <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                     ) : isWarning ? (
-                      <AlertTriangle className="h-4 w-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                      <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
                     ) : (
                       <Activity className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                     )}
@@ -3634,10 +3756,10 @@ function DashboardEnhancedComponent() {
                       {selectedClient.rssi !== undefined && (
                         <div className="flex items-center gap-2">
                           <Signal className={`h-4 w-4 ${
-                            selectedClient.rssi >= -50 ? 'text-green-600' :
+                            selectedClient.rssi >= -50 ? 'text-green-500' :
                             selectedClient.rssi >= -60 ? 'text-blue-600' :
-                            selectedClient.rssi >= -70 ? 'text-yellow-600' :
-                            'text-red-600'
+                            selectedClient.rssi >= -70 ? 'text-amber-500' :
+                            'text-red-500'
                           }`} />
                           <div>
                             <p className="text-xs text-muted-foreground">RSSI</p>
@@ -3834,9 +3956,9 @@ function DashboardEnhancedComponent() {
                   </p>
                   <div className="text-xs text-muted-foreground max-w-md mx-auto space-y-1 mt-4">
                     <p>Station events may be unavailable if:</p>
-                    <p>• Your Extreme Platform ONE doesn't support the station events API</p>
+                    <p>• Your controller doesn't support the station events API</p>
                     <p>• No events have been logged for this station in the last 30 days</p>
-                    <p>• Audit logging is not enabled on your Extreme Platform ONE</p>
+                    <p>• Audit logging is not enabled on your controller</p>
                   </div>
                   <Button
                     variant="outline"
@@ -4008,16 +4130,16 @@ function DashboardEnhancedComponent() {
                           {client.rssi !== undefined && (
                             <div className="flex items-center gap-1">
                               <Signal className={`h-4 w-4 ${
-                                client.rssi >= -50 ? 'text-green-600' :
+                                client.rssi >= -50 ? 'text-green-500' :
                                 client.rssi >= -60 ? 'text-blue-600' :
-                                client.rssi >= -70 ? 'text-yellow-600' :
-                                'text-red-600'
+                                client.rssi >= -70 ? 'text-amber-500' :
+                                'text-red-500'
                               }`} />
                               <span className="text-muted-foreground">{client.rssi} dBm</span>
                             </div>
                           )}
                           {client.authenticated !== false && (
-                            <Badge variant="outline" className="text-green-600 border-green-600">
+                            <Badge variant="outline" className="text-green-500 border-green-500">
                               <CheckCircle className="h-3 w-3 mr-1" />
                               Authenticated
                             </Badge>

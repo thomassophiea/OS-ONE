@@ -606,7 +606,7 @@ export function PacketCapture() {
         </div>
 
         {error && (
-          <Alert className="border-yellow-500">
+          <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -637,7 +637,7 @@ export function PacketCapture() {
                     <Router className="h-5 w-5 text-muted-foreground" />
                     <div className="flex-1">
                       <div className="font-medium">Edge Service Data Ports</div>
-                      <div className="text-xs text-muted-foreground">Capture traffic on Extreme Platform ONE data ports</div>
+                      <div className="text-xs text-muted-foreground">Capture traffic on controller data ports</div>
                     </div>
                     <div className={`w-4 h-4 rounded-full border-2 ${
                       captureLocation === 'appliance' ? 'border-primary bg-primary' : 'border-muted-foreground'
@@ -886,7 +886,7 @@ export function PacketCapture() {
                     className="flex-1"
                     onKeyDown={(e) => e.key === 'Enter' && addFilter()}
                   />
-                  <Button onClick={addFilter} size="icon" variant="outline">
+                  <Button onClick={addFilter} size="icon" variant="outline" aria-label="Add filter">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -972,7 +972,7 @@ export function PacketCapture() {
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full animate-pulse ${
                               capture.status === 'running' ? 'bg-green-500' :
-                              capture.status === 'stopping' ? 'bg-yellow-500' :
+                              capture.status === 'stopping' ? 'bg-amber-500' :
                               'bg-gray-400'
                             }`} />
                             <Badge variant={
@@ -1115,7 +1115,7 @@ export function PacketCapture() {
                               {file.status}
                             </Badge>
                           ) : (
-                            <Badge variant="default" className="text-xs bg-green-500">
+                            <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
                               Ready
                             </Badge>
                           )}

@@ -28,12 +28,295 @@ import {
   Power,
   Download,
   ArrowLeft,
-  Maximize2
+  Maximize2,
+  Cable,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { apiService, AccessPoint, APDetails, APStation, APRadio, APAlarm, APAlarmCategory } from '../services/api';
 import { APEventsTimeline } from './APEventsTimeline';
 import { APInsights, APInsightsFullScreen } from './APInsights';
 import { toast } from 'sonner';
+
+// Cable health detection utilities
+interface CableIssue {
+  type: 'speed_degraded' | 'speed_critical' | 'duplex_mismatch' | 'poe_issue' | 'low_power';
+  severity: 'warning' | 'critical';
+  description: string;
+  recommendation: string;
+}
+
+interface CableHealthResult {
+  status: 'good' | 'warning' | 'critical' | 'unknown';
+  speedMbps: number | null;
+  speedDisplay: string;
+  expectedSpeedMbps: number;
+  message: string;
+  aiInsight?: string;
+  issues: CableIssue[];
+  duplexMode?: string;
+  portName?: string;
+}
+
+/**
+ * Parse ethernet speed string to Mbps
+ * Handles formats like: "speed5Gbps", "speed100Mbps", "speedNA", "speedAuto"
+ */
+function parseSpeedString(speedStr: string | undefined | null): { speedMbps: number | null; speedDisplay: string } {
+  if (!speedStr || speedStr === '-') {
+    return { speedMbps: null, speedDisplay: 'Unknown' };
+  }
+
+  const speed = String(speedStr).toLowerCase().trim();
+
+  // Handle "speedNA" or "speedAuto" - these mean we can't determine actual speed
+  if (speed === 'speedna' || speed === 'speedauto' || speed === 'na' || speed === 'auto') {
+    return { speedMbps: null, speedDisplay: speedStr };
+  }
+
+  // Handle "speed5Gbps", "speed100Mbps", "speed1Gbps" format
+  const speedPrefixMatch = speed.match(/speed([\d.]+)(g|m)/i);
+  if (speedPrefixMatch) {
+    const value = parseFloat(speedPrefixMatch[1]);
+    const unit = speedPrefixMatch[2].toLowerCase();
+    const mbps = unit === 'g' ? value * 1000 : value;
+    const display = unit === 'g' ? `${value}Gbps` : `${value}Mbps`;
+    return { speedMbps: mbps, speedDisplay: display };
+  }
+
+  // Handle "5Gbps", "100Mbps" format (without "speed" prefix)
+  const gbpsMatch = speed.match(/([\d.]+)\s*g/i);
+  if (gbpsMatch) {
+    const value = parseFloat(gbpsMatch[1]);
+    return { speedMbps: value * 1000, speedDisplay: `${value}Gbps` };
+  }
+
+  const mbpsMatch = speed.match(/([\d.]+)\s*m/i);
+  if (mbpsMatch) {
+    const value = parseFloat(mbpsMatch[1]);
+    return { speedMbps: value, speedDisplay: `${value}Mbps` };
+  }
+
+  return { speedMbps: null, speedDisplay: speedStr };
+}
+
+/**
+ * Get the actual negotiated ethernet speed and duplex mode from AP data
+ * Checks ALL ports in ethPorts array and finds the one with valid speed
+ * (some APs use eth1 as uplink, not eth0)
+ */
+function getActualEthSpeed(ap: any): {
+  speedMbps: number | null;
+  speedDisplay: string;
+  portName?: string;
+  duplexMode?: string;
+} {
+  // Check all ports in ethPorts array to find one with valid speed
+  if (ap.ethPorts && Array.isArray(ap.ethPorts) && ap.ethPorts.length > 0) {
+    // First pass: find any port with valid numeric speed (not speedNA)
+    for (const port of ap.ethPorts) {
+      if (port && port.speed) {
+        const parsed = parseSpeedString(port.speed);
+        if (parsed.speedMbps !== null) {
+          return {
+            ...parsed,
+            portName: port.name || 'eth',
+            duplexMode: port.mode || port.duplex || ap.ethMode
+          };
+        }
+      }
+    }
+  }
+
+  // Fallback to ethSpeed field
+  if (ap.ethSpeed) {
+    const parsed = parseSpeedString(ap.ethSpeed);
+    return { ...parsed, duplexMode: ap.ethMode };
+  }
+
+  return { speedMbps: null, speedDisplay: 'Unknown' };
+}
+
+/**
+ * Determine expected ethernet speed based on AP model
+ */
+function getExpectedSpeed(model: string | undefined): number {
+  if (!model) return 1000;
+
+  const m = model.toUpperCase();
+
+  // WiFi 6E / WiFi 7 APs - typically have 2.5Gbps or 5Gbps ports
+  if (m.includes('AP6') || m.includes('AP7') || m.includes('635') || m.includes('655') ||
+      m.includes('735') || m.includes('755') || m.includes('OAW-AP13') || m.includes('OAW-AP15') ||
+      m.includes('5050')) {
+    return 5000; // 5Gbps for WiFi 6E
+  }
+
+  // WiFi 6 APs - typically 1Gbps or 2.5Gbps
+  if (m.includes('AP5') || m.includes('515') || m.includes('535') || m.includes('555') ||
+      m.includes('OAW-AP12') || m.includes('OAW-AP11') || m.includes('5020')) {
+    return 1000;
+  }
+
+  return 1000;
+}
+
+/**
+ * Check if duplex mode indicates a problem
+ */
+function isDuplexIssue(duplexMode: string | undefined): boolean {
+  if (!duplexMode) return false;
+  const mode = duplexMode.toLowerCase();
+  return mode.includes('half') || mode === 'halfduplex' || mode === 'half-duplex';
+}
+
+/**
+ * Check if PoE status indicates a cable issue
+ */
+function getPoEIssue(ap: any): { hasIssue: boolean; description: string } | null {
+  const powerStatus = ap.ethPowerStatus?.toLowerCase() || '';
+  const powerMode = ap.powerMode?.toLowerCase() || '';
+  const lowPower = ap.lowPower === true;
+
+  if (lowPower || powerMode.includes('low') || powerMode.includes('reduced')) {
+    return {
+      hasIssue: true,
+      description: 'AP running in low power mode - may indicate high cable resistance'
+    };
+  }
+
+  if (powerStatus.includes('low') || powerStatus.includes('insufficient') ||
+      powerStatus.includes('fault') || powerStatus.includes('error')) {
+    return {
+      hasIssue: true,
+      description: `PoE issue detected: ${ap.ethPowerStatus}`
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Analyze cable health for an AP using multiple indicators
+ */
+function analyzeCableHealth(apDetails: APDetails): CableHealthResult {
+  const apAny = apDetails as any;
+  const { speedMbps, speedDisplay, portName, duplexMode } = getActualEthSpeed(apAny);
+  const expectedSpeedMbps = getExpectedSpeed(apDetails.model || apAny.hardwareType || apAny.platformName);
+  const issues: CableIssue[] = [];
+
+  if (speedMbps === null) {
+    return {
+      status: 'unknown',
+      speedMbps: null,
+      speedDisplay,
+      expectedSpeedMbps,
+      message: 'Ethernet speed not available',
+      issues: [],
+      duplexMode,
+      portName
+    };
+  }
+
+  // Issue 1: Critical speed degradation (10Mbps or less)
+  if (speedMbps <= 10) {
+    issues.push({
+      type: 'speed_critical',
+      severity: 'critical',
+      description: `Critical: ${speedDisplay} link detected`,
+      recommendation: 'Multiple cable pairs likely damaged. Replace the entire cable and check both RJ45 connectors for damage.'
+    });
+  }
+  // Issue 2: Speed degradation (100Mbps when gigabit expected)
+  else if (speedMbps <= 100 && speedMbps < expectedSpeedMbps) {
+    issues.push({
+      type: 'speed_degraded',
+      severity: 'warning',
+      description: `Speed degraded: ${speedDisplay} (expected ${expectedSpeedMbps >= 1000 ? `${expectedSpeedMbps/1000}Gbps` : `${expectedSpeedMbps}Mbps`})`,
+      recommendation: 'Check blue pair (pins 4,5) and brown pair (pins 7,8) on both ends. These outer pairs are most commonly damaged and only needed for gigabit.'
+    });
+  }
+
+  // Issue 3: Duplex mismatch
+  if (isDuplexIssue(duplexMode)) {
+    issues.push({
+      type: 'duplex_mismatch',
+      severity: 'warning',
+      description: `Half duplex detected (${duplexMode})`,
+      recommendation: 'Half duplex indicates cable quality issues or switch port misconfiguration. Check for cable damage, excessive length (>100m), or switch port settings.'
+    });
+  }
+
+  // Issue 4: PoE/Power issues
+  const poeIssue = getPoEIssue(apAny);
+  if (poeIssue) {
+    issues.push({
+      type: 'poe_issue',
+      severity: 'warning',
+      description: poeIssue.description,
+      recommendation: 'High cable resistance reduces power delivery. Check for corroded connectors, damaged cable, or excessive cable length.'
+    });
+  }
+
+  // Issue 5: Low power mode
+  if (apAny.lowPower === true && !poeIssue) {
+    issues.push({
+      type: 'low_power',
+      severity: 'warning',
+      description: 'AP operating in low power mode',
+      recommendation: 'May be due to PoE budget constraints or cable resistance. Verify PoE source capacity and cable quality.'
+    });
+  }
+
+  // Determine overall status
+  let status: 'good' | 'warning' | 'critical' = 'good';
+  if (issues.some(i => i.severity === 'critical')) {
+    status = 'critical';
+  } else if (issues.length > 0) {
+    status = 'warning';
+  }
+
+  // Build message
+  let message = '';
+  if (issues.length === 0) {
+    message = `${speedDisplay} - Link speed is good`;
+  } else if (issues.length === 1) {
+    message = issues[0].description;
+  } else {
+    message = `Multiple issues detected: ${issues.map(i => i.type.replace(/_/g, ' ')).join(', ')}`;
+  }
+
+  // Build AI insight from all issues
+  let aiInsight = '';
+  if (issues.length > 0) {
+    if (issues.some(i => i.type === 'speed_critical')) {
+      aiInsight = 'A 10Mbps negotiation typically indicates multiple damaged pairs. Check both ends of the cable for damage to the RJ45 connector. The blue pair (pins 4, 5) and brown pair (pins 7, 8) are most commonly damaged as they are the outer pairs. Consider replacing the cable entirely.';
+    } else if (issues.some(i => i.type === 'speed_degraded')) {
+      aiInsight = 'A 100Mbps negotiation on a gigabit-capable AP usually indicates a damaged pair in the cable. Gigabit Ethernet requires all 4 pairs, while 100Mbps only uses 2. Check the blue pair (pins 4, 5) or brown pair (pins 7, 8) on the RJ45 connector.';
+    }
+
+    if (issues.some(i => i.type === 'duplex_mismatch')) {
+      aiInsight += (aiInsight ? ' Additionally, ' : '') + 'Half duplex negotiation suggests signal quality issues - possibly from cable damage, interference, or excessive length.';
+    }
+
+    if (issues.some(i => i.type === 'poe_issue' || i.type === 'low_power')) {
+      aiInsight += (aiInsight ? ' ' : '') + 'Power delivery issues can indicate high cable resistance from corroded connections or damaged conductors.';
+    }
+  }
+
+  return {
+    status,
+    speedMbps,
+    speedDisplay,
+    expectedSpeedMbps,
+    message,
+    aiInsight: aiInsight || undefined,
+    issues,
+    duplexMode,
+    portName
+  };
+}
 
 interface AccessPointDetailProps {
   serialNumber: string;
@@ -400,6 +683,109 @@ export function AccessPointDetail({ serialNumber }: AccessPointDetailProps) {
         </CardContent>
       </Card>
 
+      {/* Ethernet Status */}
+      {(() => {
+        const cableHealth = analyzeCableHealth(apDetails);
+        const apAny = apDetails as any;
+        const hasEthData = apAny.ethSpeed || apAny.ethMode || apAny.ethPowerStatus;
+
+        if (!hasEthData && cableHealth.status === 'unknown') return null;
+
+        return (
+          <Card className={cableHealth.status === 'critical' ? 'border-red-500/50' : cableHealth.status === 'warning' ? 'border-amber-500/50' : ''}>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Cable className="h-4 w-4" />
+                  <span>Ethernet Status</span>
+                </div>
+                {cableHealth.status === 'good' && (
+                  <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Good
+                  </Badge>
+                )}
+                {cableHealth.status === 'warning' && (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Check Cable
+                  </Badge>
+                )}
+                {cableHealth.status === 'critical' && (
+                  <Badge variant="destructive">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Bad Cable
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Link Speed:</span>
+                  <span className={`font-medium ${cableHealth.status === 'critical' ? 'text-red-500' : cableHealth.status === 'warning' ? 'text-amber-500' : ''}`}>
+                    {cableHealth.speedDisplay || 'N/A'}
+                  </span>
+                </div>
+                {apAny.ethPorts && (() => {
+                  // Find the port with valid speed (same logic as getActualEthSpeed)
+                  const activePort = apAny.ethPorts.find((p: any) => {
+                    if (!p?.speed) return false;
+                    const s = String(p.speed).toLowerCase();
+                    return s !== 'speedna' && s !== 'na';
+                  }) || apAny.ethPorts[0];
+                  return activePort?.mode ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Duplex Mode ({activePort.name || 'eth'}):</span>
+                      <span className="font-medium">{activePort.mode}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {apAny.ethPowerStatus && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">PoE Status:</span>
+                    <span className="font-medium">{apAny.ethPowerStatus}</span>
+                  </div>
+                )}
+                {cableHealth.status !== 'unknown' && cableHealth.expectedSpeedMbps && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Expected Speed:</span>
+                    <span className="font-medium">
+                      {cableHealth.expectedSpeedMbps >= 1000
+                        ? `${cableHealth.expectedSpeedMbps / 1000}Gbps`
+                        : `${cableHealth.expectedSpeedMbps}Mbps`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Cable Health Warning */}
+              {(cableHealth.status === 'warning' || cableHealth.status === 'critical') && (
+                <div className={`p-3 rounded-lg ${cableHealth.status === 'critical' ? 'bg-red-500/10 border border-red-500/30' : 'bg-amber-500/10 border border-amber-500/30'}`}>
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className={`h-4 w-4 mt-0.5 ${cableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`} />
+                    <div className="space-y-2">
+                      <p className={`text-sm font-medium ${cableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                        {cableHealth.message}
+                      </p>
+                      {cableHealth.aiInsight && (
+                        <div className="text-xs text-muted-foreground bg-background/50 p-2 rounded border border-border">
+                          <div className="flex items-center gap-1 mb-1">
+                            <Info className="h-3 w-3" />
+                            <span className="font-medium">AI Insight</span>
+                          </div>
+                          <p>{cableHealth.aiInsight}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* Radio Configuration */}
       {apDetails.radios && apDetails.radios.length > 0 && (
         <Card>
@@ -538,8 +924,8 @@ export function AccessPointDetail({ serialNumber }: AccessPointDetailProps) {
                     <p className="text-lg font-semibold text-destructive">{eventStats.critical}</p>
                     <p className="text-[10px] text-muted-foreground uppercase">Critical</p>
                   </div>
-                  <div className="p-2 bg-yellow-500/10 rounded-lg text-center">
-                    <p className="text-lg font-semibold text-yellow-600">{eventStats.major}</p>
+                  <div className="p-2 bg-amber-500/10 rounded-lg text-center">
+                    <p className="text-lg font-semibold text-amber-500">{eventStats.major}</p>
                     <p className="text-[10px] text-muted-foreground uppercase">Major</p>
                   </div>
                   <div className="p-2 bg-muted/30 rounded-lg text-center">
@@ -568,14 +954,14 @@ export function AccessPointDetail({ serialNumber }: AccessPointDetailProps) {
                             event.Level?.toLowerCase() === 'critical'
                               ? 'bg-destructive/10'
                               : event.Level?.toLowerCase() === 'major'
-                              ? 'bg-yellow-500/10'
+                              ? 'bg-amber-500/10'
                               : 'bg-muted'
                           }`}>
                             <EventIcon className={`h-4 w-4 ${
                               event.Level?.toLowerCase() === 'critical'
                                 ? 'text-destructive'
                                 : event.Level?.toLowerCase() === 'major'
-                                ? 'text-yellow-600'
+                                ? 'text-amber-500'
                                 : 'text-muted-foreground'
                             }`} />
                           </div>

@@ -1,6 +1,6 @@
 /**
- * Unified UI Constants for AIO Platform Management Dashboard
- * AI-Informed Orchestration
+ * Unified UI Constants for AURA Platform Management Dashboard
+ * Autonomous Unified Radio Agent
  * Ensures consistency across all pages
  */
 
@@ -27,7 +27,7 @@ export const TYPOGRAPHY = {
   labelMuted: 'text-sm font-medium text-muted-foreground',
   
   // Metrics
-  metricValue: 'text-2xl font-medium text-foreground',
+  metricValue: 'text-2xl font-bold text-foreground',
   metricLabel: 'text-xs text-muted-foreground uppercase tracking-wide',
   
   // Table

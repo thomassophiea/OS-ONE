@@ -718,7 +718,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                 onClick={handleDeleteSelectedClients}
                 disabled={selectedStations.size === 0}
               >
-                <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
                 Delete Data ({selectedStations.size})
               </Button>
             </div>
@@ -734,7 +734,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
       <Dialog open={isGdprDeleteDialogOpen} onOpenChange={setIsGdprDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
+            <DialogTitle className="flex items-center gap-2 text-red-500">
               <AlertCircle className="h-5 w-5" />
               Confirm Data Deletion
             </DialogTitle>
@@ -753,7 +753,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                   );
                 })}
               </div>
-              <p className="text-red-600 font-medium">
+              <p className="text-red-500 font-medium">
                 This action cannot be undone. All connection history, events, and statistics
                 for these devices will be permanently removed.
               </p>
@@ -818,6 +818,19 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
               </div>
             </div>
             
+            <Select value={siteFilter} onValueChange={setSiteFilter}>
+              <SelectTrigger className="w-36 h-10">
+                <MapPin className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Site" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {getUniqueSites().map((site) => (
+                  <SelectItem key={site} value={site}>{site}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-28 h-10">
                 <Filter className="mr-2 h-4 w-4" />
@@ -1141,7 +1154,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                     <CardContent className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="font-medium flex items-center gap-1">
-                          <Download className="h-4 w-4 text-green-600" />
+                          <Download className="h-4 w-4 text-green-500" />
                           Downloaded:
                         </span>
                         <span>{formatBytes(selectedStation.txBytes || selectedStation.outBytes || 0)}</span>
@@ -1170,7 +1183,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                         <div className="flex items-center gap-1">
                           {selectedStation.siteRating !== undefined && (
                             <>
-                              <Star className="h-4 w-4 text-yellow-500" />
+                              <Star className="h-4 w-4 text-amber-500" />
                               <span>{selectedStation.siteRating}</span>
                             </>
                           ) || <span>N/A</span>}
@@ -1196,7 +1209,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                     </p>
                     <div className="text-xs text-muted-foreground max-w-md mx-auto space-y-1 mt-4">
                       <p>Station events may be unavailable if:</p>
-                      <p>• Your Extreme Platform ONE doesn't support the station events API</p>
+                      <p>• Your controller doesn't support the station events API</p>
                       <p>• No events have been logged for this station in the last 30 days</p>
                       <p>• Audit logging is not enabled</p>
                     </div>

@@ -1527,11 +1527,19 @@ class ApiService {
 
   async getSiteById(siteId: string): Promise<Site | null> {
     try {
-      // First try to get from the sites list
+      // First try to get from the sites list by ID, then by name
       const sites = await this.getSites();
       const foundSite = sites.find(site => site.id === siteId);
       if (foundSite) {
         return foundSite;
+      }
+      // Fallback: try matching by name (in case caller passed a name instead of ID)
+      const foundByName = sites.find(site =>
+        (site.name && site.name.toLowerCase() === siteId.toLowerCase()) ||
+        (site.siteName && site.siteName.toLowerCase() === siteId.toLowerCase())
+      );
+      if (foundByName) {
+        return foundByName;
       }
       
       // If not found in sites list, try individual site lookup endpoints
@@ -2756,6 +2764,45 @@ class ApiService {
     }
   }
 
+  async createTopology(topologyData: any): Promise<any> {
+    cacheService.delete('topologies');
+    const response = await this.makeAuthenticatedRequest('/v1/topologies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(topologyData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create topology: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateTopology(topologyId: string, topologyData: any): Promise<any> {
+    cacheService.delete('topologies');
+    const response = await this.makeAuthenticatedRequest(`/v1/topologies/${encodeURIComponent(topologyId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(topologyData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update topology: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteTopology(topologyId: string): Promise<void> {
+    cacheService.delete('topologies');
+    const response = await this.makeAuthenticatedRequest(`/v1/topologies/${encodeURIComponent(topologyId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete topology: ${response.status} - ${errorText}`);
+    }
+  }
+
   // Get various statistics
   async getSiteStats(): Promise<SiteStats> {
     const response = await this.makeAuthenticatedRequest('/v1/sites/stats');
@@ -2874,6 +2921,42 @@ class ApiService {
 
     logger.warn('No profiles endpoint found');
     return [];
+  }
+
+  async createProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/profiles/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/profiles/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete profile: ${response.status} - ${errorText}`);
+    }
   }
 
   /**
@@ -4347,6 +4430,42 @@ class ApiService {
     }
   }
 
+  async createRFManagementProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/rfmgmt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create RF profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateRFManagementProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/rfmgmt/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update RF profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteRFManagementProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/rfmgmt/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete RF profile: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get all IoT profiles
    * Endpoint: GET /v3/iotprofile
@@ -4367,6 +4486,42 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch IoT profiles:', error);
       return [];
+    }
+  }
+
+  async createIoTProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/iotprofile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create IoT profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateIoTProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/iotprofile/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update IoT profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteIoTProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/iotprofile/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete IoT profile: ${response.status} - ${errorText}`);
     }
   }
 
@@ -4393,6 +4548,42 @@ class ApiService {
     }
   }
 
+  async createADSPProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/adsp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create ADSP profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateADSPProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/adsp/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update ADSP profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteADSPProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/adsp/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete ADSP profile: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get all analytics profiles
    * Endpoint: GET /v3/analytics
@@ -4413,6 +4604,42 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch analytics profiles:', error);
       return [];
+    }
+  }
+
+  async createAnalyticsProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create analytics profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateAnalyticsProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/analytics/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update analytics profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteAnalyticsProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/analytics/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete analytics profile: ${response.status} - ${errorText}`);
     }
   }
 
@@ -4439,6 +4666,42 @@ class ApiService {
     }
   }
 
+  async createPositioningProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/positioning', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create positioning profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updatePositioningProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/positioning/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update positioning profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deletePositioningProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/positioning/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete positioning profile: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get all mesh points
    * Endpoint: GET /v3/meshpoints
@@ -4462,6 +4725,42 @@ class ApiService {
     }
   }
 
+  async createMeshPoint(data: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/meshpoints', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create meshpoint: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateMeshPoint(meshpointId: string, data: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/meshpoints/${encodeURIComponent(meshpointId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update meshpoint: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteMeshPoint(meshpointId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/meshpoints/${encodeURIComponent(meshpointId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete meshpoint: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get all switch port profiles
    * Endpoint: GET /v3/switchportprofile
@@ -4482,6 +4781,42 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch switch port profiles:', error);
       return [];
+    }
+  }
+
+  async createSwitchPortProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/switchportprofile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create switch port profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateSwitchPortProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/switchportprofile/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update switch port profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteSwitchPortProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/switchportprofile/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete switch port profile: ${response.status} - ${errorText}`);
     }
   }
 
@@ -4560,6 +4895,42 @@ class ApiService {
     }
   }
 
+  async createRateLimiter(data: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v1/ratelimiters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create rate limiter: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateRateLimiter(rateLimiterId: string, data: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v1/ratelimiters/${encodeURIComponent(rateLimiterId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update rate limiter: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteRateLimiter(rateLimiterId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v1/ratelimiters/${encodeURIComponent(rateLimiterId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete rate limiter: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get CoS (Class of Service) profiles
    * Endpoint: GET /v1/cos
@@ -4580,6 +4951,42 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch CoS profiles:', error);
       return [];
+    }
+  }
+
+  async createCoSProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v1/cos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create CoS profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateCoSProfile(cosId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v1/cos/${encodeURIComponent(cosId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update CoS profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteCoSProfile(cosId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v1/cos/${encodeURIComponent(cosId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete CoS profile: ${response.status} - ${errorText}`);
     }
   }
 
@@ -4849,6 +5256,42 @@ class ApiService {
     }
   }
 
+  async createXLocationProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v3/xlocation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create XLocation profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateXLocationProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v3/xlocation/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update XLocation profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteXLocationProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v3/xlocation/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete XLocation profile: ${response.status} - ${errorText}`);
+    }
+  }
+
   /**
    * Get station location data
    * Endpoint: GET /v1/stations/{stationId}/location
@@ -5014,6 +5457,181 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch eGuest profiles:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get eGuest default configuration
+   * Endpoint: GET /v1/eguest/default
+   */
+  async getEGuestDefault(): Promise<any> {
+    try {
+      logger.log('[API] Fetching eGuest default config');
+      const response = await this.makeAuthenticatedRequest('/v1/eguest/default', {}, 10000);
+
+      if (!response.ok) {
+        logger.warn(`eGuest default API returned ${response.status}`);
+        return null;
+      }
+
+      const data = await response.json();
+      logger.log('[API] ✓ Loaded eGuest default config');
+      return data;
+    } catch (error) {
+      logger.error('[API] Failed to fetch eGuest default:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a new eGuest portal profile
+   * Endpoint: POST /v1/eguest
+   */
+  async createEGuestProfile(profileData: any): Promise<any> {
+    try {
+      logger.log('[API] Creating eGuest profile');
+      const response = await this.makeAuthenticatedRequest('/v1/eguest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData)
+      }, 15000);
+
+      if (!response.ok) {
+        throw new Error(`eGuest creation failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      logger.log('[API] ✓ eGuest profile created');
+      return data;
+    } catch (error) {
+      logger.error('[API] Failed to create eGuest profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update an eGuest portal profile
+   * Endpoint: PUT /v1/eguest/{eguestId}
+   */
+  async updateEGuestProfile(eguestId: string, profileData: any): Promise<any> {
+    try {
+      const endpoint = `/v1/eguest/${encodeURIComponent(eguestId)}`;
+      logger.log(`[API] Updating eGuest profile: ${eguestId}`);
+      const response = await this.makeAuthenticatedRequest(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData)
+      }, 15000);
+
+      if (!response.ok) {
+        throw new Error(`eGuest update failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      logger.log('[API] ✓ eGuest profile updated');
+      return data;
+    } catch (error) {
+      logger.error('[API] Failed to update eGuest profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an eGuest portal profile
+   * Endpoint: DELETE /v1/eguest/{eguestId}
+   */
+  async deleteEGuestProfile(eguestId: string): Promise<void> {
+    try {
+      const endpoint = `/v1/eguest/${encodeURIComponent(eguestId)}`;
+      logger.log(`[API] Deleting eGuest profile: ${eguestId}`);
+      const response = await this.makeAuthenticatedRequest(endpoint, {
+        method: 'DELETE'
+      }, 10000);
+
+      if (!response.ok) {
+        throw new Error(`eGuest deletion failed: ${response.status}`);
+      }
+
+      logger.log('[API] ✓ eGuest profile deleted');
+    } catch (error) {
+      logger.error('[API] Failed to delete eGuest profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a new AAA policy
+   * Endpoint: POST /v1/aaapolicy
+   */
+  async createAAAPolicy(policyData: any): Promise<any> {
+    try {
+      logger.log('[API] Creating AAA policy');
+      const response = await this.makeAuthenticatedRequest('/v1/aaapolicy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(policyData)
+      }, 15000);
+
+      if (!response.ok) {
+        throw new Error(`AAA policy creation failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      logger.log('[API] ✓ AAA policy created');
+      return data;
+    } catch (error) {
+      logger.error('[API] Failed to create AAA policy:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a AAA policy
+   * Endpoint: PUT /v1/aaapolicy/{id}
+   */
+  async updateAAAPolicy(policyId: string, policyData: any): Promise<any> {
+    try {
+      const endpoint = `/v1/aaapolicy/${encodeURIComponent(policyId)}`;
+      logger.log(`[API] Updating AAA policy: ${policyId}`);
+      const response = await this.makeAuthenticatedRequest(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(policyData)
+      }, 15000);
+
+      if (!response.ok) {
+        throw new Error(`AAA policy update failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      logger.log('[API] ✓ AAA policy updated');
+      return data;
+    } catch (error) {
+      logger.error('[API] Failed to update AAA policy:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a AAA policy
+   * Endpoint: DELETE /v1/aaapolicy/{id}
+   */
+  async deleteAAAPolicy(policyId: string): Promise<void> {
+    try {
+      const endpoint = `/v1/aaapolicy/${encodeURIComponent(policyId)}`;
+      logger.log(`[API] Deleting AAA policy: ${policyId}`);
+      const response = await this.makeAuthenticatedRequest(endpoint, {
+        method: 'DELETE'
+      }, 10000);
+
+      if (!response.ok) {
+        throw new Error(`AAA policy deletion failed: ${response.status}`);
+      }
+
+      logger.log('[API] ✓ AAA policy deleted');
+    } catch (error) {
+      logger.error('[API] Failed to delete AAA policy:', error);
+      throw error;
     }
   }
 
@@ -5299,6 +5917,19 @@ class ApiService {
     }
   }
 
+  async updateAccessControl(accessControlData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v1/accesscontrol', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(accessControlData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update access control: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
   /**
    * Get NSight configuration
    * Endpoint: GET /v1/nsightconfig
@@ -5477,6 +6108,42 @@ class ApiService {
     } catch (error) {
       logger.error('[API] Failed to fetch RTLS profiles:', error);
       return [];
+    }
+  }
+
+  async createRTLSProfile(profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest('/v1/rtlsprofile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create RTLS profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async updateRTLSProfile(profileId: string, profileData: any): Promise<any> {
+    const response = await this.makeAuthenticatedRequest(`/v1/rtlsprofile/${encodeURIComponent(profileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profileData)
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to update RTLS profile: ${response.status} - ${errorText}`);
+    }
+    return await response.json();
+  }
+
+  async deleteRTLSProfile(profileId: string): Promise<void> {
+    const response = await this.makeAuthenticatedRequest(`/v1/rtlsprofile/${encodeURIComponent(profileId)}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete RTLS profile: ${response.status} - ${errorText}`);
     }
   }
 
@@ -6015,19 +6682,33 @@ class ApiService {
    */
   async getAPSoftwareVersions(): Promise<any[]> {
     try {
-      logger.log('[API] Fetching AP software versions');
-      const response = await this.makeAuthenticatedRequest('/v1/aps/swversion', {}, 10000);
+      logger.log('[API] Fetching AP upgrade image list');
+      const response = await this.makeAuthenticatedRequest('/v1/aps/upgradeimagelist', {}, 10000);
 
       if (!response.ok) {
-        logger.warn(`AP software versions API returned ${response.status}`);
+        logger.warn(`AP upgrade image list API returned ${response.status}`);
         return [];
       }
 
       const data = await response.json();
-      logger.log(`[API] ✓ Loaded ${data?.length || 0} AP software versions`);
-      return data || [];
+      // Response is a map: { "AP7612": ["image1.img", "image2.img"], ... }
+      // Transform to flat list of unique version strings
+      const versions: string[] = [];
+      if (data && typeof data === 'object') {
+        for (const images of Object.values(data)) {
+          if (Array.isArray(images)) {
+            for (const img of images) {
+              if (typeof img === 'string' && !versions.includes(img)) {
+                versions.push(img);
+              }
+            }
+          }
+        }
+      }
+      logger.log(`[API] ✓ Loaded ${versions.length} AP upgrade images`);
+      return versions;
     } catch (error) {
-      logger.error('[API] Failed to fetch AP software versions:', error);
+      logger.error('[API] Failed to fetch AP upgrade images:', error);
       return [];
     }
   }
@@ -6659,21 +7340,20 @@ class ApiService {
    */
   async upgradeAPSoftware(serialNumbers: string[], imageVersion: string): Promise<any> {
     try {
-      const endpoint = '/v1/accesspoints/software/upgrade';
+      const endpoint = `/v1/aps/upgrade?apImageName=${encodeURIComponent(imageVersion)}`;
       logger.log(`[API] Upgrading ${serialNumbers.length} APs to ${imageVersion}`);
       const response = await this.makeAuthenticatedRequest(endpoint, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serialNumbers, imageVersion })
+        body: JSON.stringify({ serialNumbers })
       }, 30000);
 
       if (!response.ok) {
         throw new Error(`AP software upgrade failed: ${response.status}`);
       }
 
-      const data = await response.json();
       logger.log('[API] ✓ AP software upgrade initiated');
-      return data;
+      return { success: true };
     } catch (error) {
       logger.error('[API] Failed to upgrade AP software:', error);
       throw error;
@@ -6681,50 +7361,51 @@ class ApiService {
   }
 
   /**
-   * Get AP upgrade schedule
-   * Endpoint: GET /v1/accesspoints/software/schedule
+   * Get AP upgrade schedules
+   * Note: No GET endpoint exists in swagger; schedules tracked locally
    */
   async getAPUpgradeSchedules(): Promise<any[]> {
-    try {
-      const endpoint = '/v1/accesspoints/software/schedule';
-      logger.log('[API] Fetching AP upgrade schedules');
-      const response = await this.makeAuthenticatedRequest(endpoint, {}, 10000);
-
-      if (!response.ok) {
-        logger.warn(`AP upgrade schedule API returned ${response.status}`);
-        return [];
-      }
-
-      const data = await response.json();
-      logger.log(`[API] ✓ Loaded ${data?.length || 0} upgrade schedules`);
-      return data || [];
-    } catch (error) {
-      logger.error('[API] Failed to fetch AP upgrade schedules:', error);
-      return [];
-    }
+    // No GET endpoint for upgrade schedules in the controller API
+    logger.log('[API] AP upgrade schedules: no list endpoint available');
+    return [];
   }
 
   /**
-   * Create AP upgrade schedule
-   * Endpoint: POST /v1/accesspoints/software/schedule
+   * Create/Schedule AP upgrade
+   * Endpoint: PUT /v1/aps/upgradeschedule (ApUpgradeScheduleElement)
    */
   async createAPUpgradeSchedule(schedule: any): Promise<any> {
     try {
-      const endpoint = '/v1/accesspoints/software/schedule';
+      const endpoint = '/v1/aps/upgradeschedule';
       logger.log('[API] Creating AP upgrade schedule');
+
+      // Transform to ApUpgradeScheduleElement format
+      const deviceInfo: Record<string, string> = {};
+      if (schedule.deviceSerialNumbers && schedule.targetVersion) {
+        for (const sn of schedule.deviceSerialNumbers) {
+          deviceInfo[sn] = schedule.targetVersion;
+        }
+      }
+
+      const body = {
+        utcSecondsSinceEpoc: schedule.scheduledTime
+          ? Math.floor(new Date(schedule.scheduledTime).getTime() / 1000)
+          : null,
+        deviceInfo
+      };
+
       const response = await this.makeAuthenticatedRequest(endpoint, {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(schedule)
+        body: JSON.stringify(body)
       }, 15000);
 
       if (!response.ok) {
         throw new Error(`Failed to create upgrade schedule: ${response.status}`);
       }
 
-      const data = await response.json();
       logger.log('[API] ✓ Upgrade schedule created');
-      return data;
+      return { success: true };
     } catch (error) {
       logger.error('[API] Failed to create AP upgrade schedule:', error);
       throw error;
@@ -6733,25 +7414,11 @@ class ApiService {
 
   /**
    * Delete AP upgrade schedule
-   * Endpoint: DELETE /v1/accesspoints/software/schedule/{id}
+   * Note: No DELETE endpoint exists in swagger
    */
   async deleteAPUpgradeSchedule(scheduleId: string): Promise<void> {
-    try {
-      const endpoint = `/v1/accesspoints/software/schedule/${encodeURIComponent(scheduleId)}`;
-      logger.log(`[API] Deleting upgrade schedule: ${scheduleId}`);
-      const response = await this.makeAuthenticatedRequest(endpoint, {
-        method: 'DELETE'
-      }, 15000);
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete upgrade schedule: ${response.status}`);
-      }
-
-      logger.log('[API] ✓ Upgrade schedule deleted');
-    } catch (error) {
-      logger.error('[API] Failed to delete AP upgrade schedule:', error);
-      throw error;
-    }
+    logger.warn('[API] AP upgrade schedule deletion not supported by controller API');
+    throw new Error('Schedule deletion not supported');
   }
 
   /**

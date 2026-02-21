@@ -34,8 +34,8 @@ interface App {
 const APPS: App[] = [
   {
     id: 'mobility-engine-mgmt',
-    name: 'AIO Management',
-    description: 'Full-featured management dashboard for AIO platform',
+    name: 'API Management',
+    description: 'Full-featured management dashboard for API platform',
     isActive: true,
     icon: Activity,
     url: 'https://tsophiea.ddns.net:443/management'
@@ -69,7 +69,7 @@ const APPS: App[] = [
   {
     id: 'xiq-edge-migration',
     name: 'XIQ Edge Migration',
-    description: 'Automated migration tool for transitioning Edge Services configurations from XIQ to Extreme Platform ONE',
+    description: 'Automated migration tool for transitioning Edge Services configurations from XIQ to the controller',
     isActive: false,
     icon: Layers,
     url: 'https://xiq-migration.up.railway.app/'

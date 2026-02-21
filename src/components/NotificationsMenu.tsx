@@ -27,6 +27,8 @@ import { Separator } from './ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { apiService } from '../services/api';
 import { toast } from 'sonner';
+import { useGlobalFilters } from '../hooks/useGlobalFilters';
+import { useContextScope } from '../hooks/useContextScope';
 
 interface Alert {
   id: string;
@@ -88,9 +90,9 @@ const getCategoryIcon = (category: string) => {
 const getSeverityColor = (severity: string) => {
   switch (severity.toLowerCase()) {
     case 'critical':
-      return 'text-red-600 bg-red-600/10 border-red-600/20';
+      return 'text-red-500 bg-red-500/10 border-red-500/20';
     case 'warning':
-      return 'text-yellow-600 bg-yellow-600/10 border-yellow-600/20';
+      return 'text-amber-500 bg-amber-500/10 border-amber-500/20';
     case 'info':
     case 'low':
       return 'text-blue-600 bg-blue-600/10 border-blue-600/20';
@@ -102,12 +104,12 @@ const getSeverityColor = (severity: string) => {
 const getStatusIcon = (status: string) => {
   switch (status) {
     case 'active':
-      return <AlertCircle className="h-4 w-4 text-red-600" />;
+      return <AlertCircle className="h-4 w-4 text-red-500" />;
     case 'acknowledged':
-      return <Clock className="h-4 w-4 text-yellow-600" />;
+      return <Clock className="h-4 w-4 text-amber-500" />;
     case 'resolved':
     case 'cleared':
-      return <CheckCircle2 className="h-4 w-4 text-green-600" />;
+      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
     default:
       return <Info className="h-4 w-4 text-muted-foreground" />;
   }
@@ -140,6 +142,8 @@ const getNotificationTypeLabel = (type: NotificationItem['type']) => {
 };
 
 export function NotificationsMenu() {
+  const { filters } = useGlobalFilters();
+  const scope = useContextScope();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -153,7 +157,7 @@ export function NotificationsMenu() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, [filters.site]); // Reload when site context changes
 
   const loadNotifications = async () => {
     setLoading(true);
@@ -162,20 +166,55 @@ export function NotificationsMenu() {
       const alertsData = await loadAlertsData();
       const eventsData = await loadEventsData();
       const systemData = await loadSystemNotifications();
-      
+
       // Combine all notification sources
-      const allNotifications = [
+      let allNotifications = [
         ...alertsData,
         ...eventsData,
         ...systemData
       ];
-      
+
+      // STRICT: Filter by site device correlation when site-scoped
+      if (filters.site !== 'all') {
+        allNotifications = await filterNotificationsBySite(allNotifications, filters.site);
+      }
+
       setNotifications(allNotifications);
     } catch (error) {
-      // Silently handle expected API failures - errors are already handled by global error system
+      // Silently handle expected API failures
       setNotifications([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // STRICT: Filter notifications by AP-site device correlation
+  const filterNotificationsBySite = async (items: NotificationItem[], siteId: string): Promise<NotificationItem[]> => {
+    try {
+      const siteAPs = await apiService.getAccessPointsBySite(siteId);
+      const deviceIds = new Set<string>();
+      siteAPs.forEach(ap => {
+        if (ap.name) deviceIds.add(ap.name.toLowerCase());
+        if (ap.serialNumber) deviceIds.add(ap.serialNumber.toLowerCase());
+        if ((ap as any).hostname) deviceIds.add((ap as any).hostname.toLowerCase());
+        if ((ap as any).macAddress) deviceIds.add((ap as any).macAddress.toLowerCase());
+      });
+
+      if (deviceIds.size === 0) return []; // STRICT: no devices = no notifications
+
+      // Filter items that have associated device information matching site APs
+      return items.filter(item => {
+        // NotificationItems don't have device fields directly,
+        // so we check the title/message for device name references
+        const titleLower = (item.title || '').toLowerCase();
+        const msgLower = (item.message || '').toLowerCase();
+        for (const devId of deviceIds) {
+          if (titleLower.includes(devId) || msgLower.includes(devId)) return true;
+        }
+        return false;
+      });
+    } catch {
+      return []; // STRICT: empty on failure
     }
   };
 
@@ -320,13 +359,17 @@ export function NotificationsMenu() {
     <div
       key={notification.id}
       className={`
-        p-4 rounded-lg border transition-all duration-200 cursor-pointer
-        ${notification.isRead 
-          ? 'bg-background border-border/50 hover:border-border' 
+        p-4 rounded-lg border transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/50
+        ${notification.isRead
+          ? 'bg-background border-border/50 hover:border-border'
           : 'bg-accent/20 border-accent hover:border-accent/50'
         }
       `}
       onClick={() => handleMarkAsRead(notification.id)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleMarkAsRead(notification.id); }}}
+      role="button"
+      tabIndex={0}
+      aria-label={`${notification.isRead ? 'Read' : 'Unread'} notification: ${notification.title}. Click to mark as read.`}
     >
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-0.5">
@@ -342,7 +385,7 @@ export function NotificationsMenu() {
             </h4>
             <div className="flex items-center gap-2 flex-shrink-0">
               {!notification.isRead && (
-                <div className="w-2 h-2 bg-primary rounded-full" />
+                <div className="w-2 h-2 bg-primary rounded-full" aria-hidden="true" />
               )}
               <Badge 
                 variant="outline" 
@@ -414,10 +457,19 @@ export function NotificationsMenu() {
               )}
             </div>
             <SheetDescription>
-              View and manage your system notifications including alerts, events, and status updates.
+              {scope.isSiteScoped
+                ? `Notifications for ${scope.siteName || 'selected site'}`
+                : 'View and manage your system notifications including alerts, events, and status updates.'}
             </SheetDescription>
             <div className="text-left mt-2">
-              <h3 className="font-medium text-foreground mb-1">Notifications</h3>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-medium text-foreground">Notifications</h3>
+                {scope.isSiteScoped && (
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    {scope.label}
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {unreadCount} unread of {totalCount} total
               </p>

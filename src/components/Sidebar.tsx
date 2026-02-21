@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Zap,
   BarChart3,
   Wrench,
   AppWindow,
@@ -27,7 +28,8 @@ import {
   Bell,
   HardDrive,
   LayoutDashboard,
-  HelpCircle
+  HelpCircle,
+  Target
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import extremeNetworksLogo from 'figma:asset/cc372b1d703a0b056a9f8c590da6c8e1cb4947fd.png';
@@ -45,7 +47,7 @@ interface SidebarProps {
   adminRole: string | null;
   currentPage: string;
   onPageChange: (page: string) => void;
-  theme?: 'light' | 'dark' | 'system';
+  theme?: 'light' | 'dark' | 'synthwave' | 'system';
   onThemeToggle?: () => void;
 }
 
@@ -53,6 +55,7 @@ interface SidebarProps {
 const navigationItems = [
   { id: 'workspace', label: 'Workspace', icon: LayoutDashboard },
   { id: 'service-levels', label: 'Contextual Insights', icon: Brain },
+  { id: 'sle-dashboard', label: 'Service Levels', icon: Target },
   { id: 'app-insights', label: 'App Insights', icon: AppWindow },
   { id: 'connected-clients', label: 'Connected Clients', icon: Users },
   { id: 'access-points', label: 'Access Points', icon: Wifi },
@@ -66,6 +69,7 @@ const configureItems = [
   { id: 'configure-policy', label: 'Policy', icon: Shield },
   { id: 'configure-aaa-policies', label: 'AAA Policies', icon: UserCheck },
   { id: 'configure-guest', label: 'Guest', icon: UserPlus },
+  { id: 'configure-advanced', label: 'Advanced', icon: Settings },
 ];
 
 // System Management items
@@ -389,6 +393,8 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
               <Sun className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
             ) : theme === 'dark' ? (
               <Moon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+            ) : theme === 'synthwave' ? (
+              <Zap className={cn("h-4 w-4 text-pink-400", !isCollapsed && "mr-2")} />
             ) : (
               <Monitor className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
             )}
@@ -396,6 +402,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
               <span>
                 {theme === 'light' ? 'Light' :
                  theme === 'dark' ? 'Dark' :
+                 theme === 'synthwave' ? 'Miami Vice' :
                  'Auto'}
               </span>
             )}

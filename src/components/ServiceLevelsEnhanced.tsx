@@ -37,6 +37,8 @@ import {
 } from 'lucide-react';
 import { apiService, Site } from '../services/api';
 import { toast } from 'sonner';
+import { useGlobalFilters } from '../hooks/useGlobalFilters';
+import { useContextScope } from '../hooks/useContextScope';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { BestPracticesWidget } from './BestPracticesWidget';
 import { NetworkRewind } from './NetworkRewind';
@@ -103,19 +105,24 @@ interface Station {
 }
 
 export function ServiceLevelsEnhanced() {
+  // Sync with global site filter for consistent context scoping
+  const { filters, updateFilter } = useGlobalFilters();
+  const scope = useContextScope();
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  
+
   // Service data
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [serviceReport, setServiceReport] = useState<ServiceReport | null>(null);
   const [serviceStations, setServiceStations] = useState<Station[]>([]);
-  
-  // Site filtering
+
+  // Site filtering - synced with global filters
   const [sites, setSites] = useState<Site[]>([]);
-  const [selectedSite, setSelectedSite] = useState<string>('all');
+  const selectedSite = filters.site;
+  const setSelectedSite = (value: string) => updateFilter('site', value);
   const [isLoadingSites, setIsLoadingSites] = useState(false);
   
   // Filters
@@ -183,30 +190,53 @@ export function ServiceLevelsEnhanced() {
         setLoading(true);
       }
 
-      console.log('[ServiceLevels] Fetching services from /v1/services...');
+      const siteId = selectedSite !== 'all' ? selectedSite : undefined;
+      console.log('[ServiceLevels] Fetching services' + (siteId ? ` for site: ${siteId}` : ''));
 
-      const response = await apiService.makeAuthenticatedRequest('/v1/services', { method: 'GET' }, 15000);
+      let servicesList: any[] = [];
 
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+      // STRICT: Use site-specific API when site is selected. No global fallback.
+      if (siteId) {
+        try {
+          servicesList = await apiService.getServicesBySite(siteId);
+          console.log('[ServiceLevels] Loaded', servicesList.length, 'services for site');
+        } catch {
+          // Fall through to client-side filter
+        }
+
+        // STRICT: If site-specific API returned nothing, try client-side filter
+        if (servicesList.length === 0) {
+          try {
+            const response = await apiService.makeAuthenticatedRequest('/v1/services', { method: 'GET' }, 15000);
+            if (response.ok) {
+              const data = await response.json();
+              const allServices = Array.isArray(data) ? data : (data.services || data.data || []);
+              const site = await apiService.getSiteById(siteId).catch(() => null);
+              const siteName = site?.name || site?.siteName || siteId;
+              servicesList = allServices.filter((service: any) => {
+                const serviceSite = service.siteName || service.site || service.location;
+                return serviceSite === siteName || serviceSite === siteId;
+              });
+              console.log('[ServiceLevels] Client-side filtered to', servicesList.length, 'services for site');
+            }
+          } catch {
+            // STRICT: empty on failure
+          }
+        }
+      } else {
+        // No site filter: fetch all services
+        const response = await apiService.makeAuthenticatedRequest('/v1/services', { method: 'GET' }, 15000);
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+        const data = await response.json();
+        servicesList = Array.isArray(data) ? data : (data.services || data.data || []);
       }
-
-      const data = await response.json();
-      const servicesList = Array.isArray(data) ? data : (data.services || data.data || []);
 
       console.log('[ServiceLevels] Loaded', servicesList.length, 'services');
-      
-      // Filter services by selected site if needed
-      let filteredServices = servicesList;
-      if (selectedSite && selectedSite !== 'all') {
-        filteredServices = servicesList.filter(service => {
-          // Services might have site information in different fields
-          // Check common field names
-          const serviceSite = service.siteName || service.site || service.location;
-          return serviceSite === selectedSite;
-        });
-        console.log('[ServiceLevels] Filtered to', filteredServices.length, 'services for site:', selectedSite);
-      }
+
+      // STRICT: No additional global fallback - use what we have (even if empty)
+      const filteredServices = servicesList;
       
       setServices(filteredServices);
 
@@ -229,7 +259,7 @@ export function ServiceLevelsEnhanced() {
     } catch (error) {
       console.error('[ServiceLevels] Error loading services:', error);
       toast.error('Failed to load services', {
-        description: 'Unable to connect to Extreme Platform ONE API'
+        description: 'Unable to connect to the controller API'
       });
     } finally {
       setLoading(false);
@@ -500,20 +530,20 @@ export function ServiceLevelsEnhanced() {
 
   const getMetricColor = (status: 'good' | 'warn' | 'poor'): string => {
     switch (status) {
-      case 'good': return 'text-green-600';
-      case 'warn': return 'text-yellow-600';
-      case 'poor': return 'text-red-600';
+      case 'good': return 'text-green-500';
+      case 'warn': return 'text-amber-500';
+      case 'poor': return 'text-red-500';
     }
   };
 
   const getMetricBadge = (status: 'good' | 'warn' | 'poor') => {
     switch (status) {
       case 'good':
-        return <Badge variant="outline" className="border-green-600 text-green-600">Excellent</Badge>;
+        return <Badge variant="outline" className="border-green-500 text-green-500">Excellent</Badge>;
       case 'warn':
-        return <Badge variant="outline" className="border-yellow-600 text-yellow-600">Warning</Badge>;
+        return <Badge variant="outline" className="border-amber-500 text-amber-500">Warning</Badge>;
       case 'poor':
-        return <Badge variant="outline" className="border-red-600 text-red-600">Poor</Badge>;
+        return <Badge variant="outline" className="border-red-500 text-red-500">Poor</Badge>;
     }
   };
 
@@ -697,9 +727,18 @@ export function ServiceLevelsEnhanced() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl tracking-tight">Service Level Analytics</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl tracking-tight">Service Level Analytics</h2>
+            {scope.isSiteScoped && (
+              <Badge variant="outline" className="text-xs font-normal">
+                {scope.label}
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground">
-            Real-time service performance metrics and SLA compliance
+            {scope.isSiteScoped
+              ? `Service performance for ${scope.siteName || 'selected site'}`
+              : 'Real-time service performance metrics and SLA compliance'}
             {lastUpdate && (
               <span className="ml-2">• Last updated {lastUpdate.toLocaleTimeString()}</span>
             )}
@@ -707,7 +746,7 @@ export function ServiceLevelsEnhanced() {
         </div>
         <div className="flex items-center gap-2">
           <Select value={selectedSite} onValueChange={(value) => {
-            console.log('Site filter changed to:', value);
+            console.log('[ServiceLevels] Site filter changed to:', value);
             setSelectedSite(value);
           }}>
             <SelectTrigger className="w-48">
@@ -718,7 +757,7 @@ export function ServiceLevelsEnhanced() {
               <SelectItem value="all">All Sites</SelectItem>
               {sites.length > 0 ? (
                 sites.map((site) => (
-                  <SelectItem key={site.id} value={site.name || site.siteName || site.id}>
+                  <SelectItem key={site.id} value={site.id}>
                     {site.name || site.siteName || site.id}
                   </SelectItem>
                 ))
@@ -860,8 +899,8 @@ export function ServiceLevelsEnhanced() {
                         <span className="text-sm font-medium">Latency</span>
                       </div>
                       <span className={`text-sm font-bold ${
-                        serviceReport.metrics.latency < 20 ? 'text-green-600' :
-                        serviceReport.metrics.latency < 50 ? 'text-yellow-600' : 'text-red-600'
+                        serviceReport.metrics.latency < 20 ? 'text-green-500' :
+                        serviceReport.metrics.latency < 50 ? 'text-amber-500' : 'text-red-500'
                       }`}>
                         {serviceReport.metrics.latency.toFixed(1)} ms
                       </span>
@@ -883,8 +922,8 @@ export function ServiceLevelsEnhanced() {
                         <span className="text-sm font-medium">Jitter</span>
                       </div>
                       <span className={`text-sm font-bold ${
-                        serviceReport.metrics.jitter < 10 ? 'text-green-600' :
-                        serviceReport.metrics.jitter < 30 ? 'text-yellow-600' : 'text-red-600'
+                        serviceReport.metrics.jitter < 10 ? 'text-green-500' :
+                        serviceReport.metrics.jitter < 30 ? 'text-amber-500' : 'text-red-500'
                       }`}>
                         {serviceReport.metrics.jitter.toFixed(1)} ms
                       </span>
@@ -930,8 +969,8 @@ export function ServiceLevelsEnhanced() {
                         <span className="text-sm font-medium">Signal Strength (RSSI)</span>
                       </div>
                       <span className={`text-sm font-bold ${
-                        serviceReport.metrics.averageRssi >= -50 ? 'text-green-600' :
-                        serviceReport.metrics.averageRssi >= -70 ? 'text-yellow-600' : 'text-red-600'
+                        serviceReport.metrics.averageRssi >= -50 ? 'text-green-500' :
+                        serviceReport.metrics.averageRssi >= -70 ? 'text-amber-500' : 'text-red-500'
                       }`}>
                         {serviceReport.metrics.averageRssi} dBm
                       </span>
@@ -958,8 +997,8 @@ export function ServiceLevelsEnhanced() {
                         <span className="text-sm font-medium">Signal Quality (SNR)</span>
                       </div>
                       <span className={`text-sm font-bold ${
-                        serviceReport.metrics.averageSnr >= 40 ? 'text-green-600' :
-                        serviceReport.metrics.averageSnr >= 25 ? 'text-yellow-600' : 'text-red-600'
+                        serviceReport.metrics.averageSnr >= 40 ? 'text-green-500' :
+                        serviceReport.metrics.averageSnr >= 25 ? 'text-amber-500' : 'text-red-500'
                       }`}>
                         {serviceReport.metrics.averageSnr} dB
                       </span>
@@ -1339,7 +1378,7 @@ export function ServiceLevelsEnhanced() {
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <div className="flex flex-col items-center justify-center w-10">
                               {station.authenticated !== false ? (
-                                <Shield className="h-5 w-5 text-green-600" />
+                                <Shield className="h-5 w-5 text-green-500" />
                               ) : (
                                 <Shield className="h-5 w-5 text-gray-400" />
                               )}
@@ -1350,7 +1389,7 @@ export function ServiceLevelsEnhanced() {
                                   {station.hostName || station.macAddress}
                                 </span>
                                 {station.authenticated !== false && (
-                                  <Badge variant="outline" className="text-xs border-green-600 text-green-600">
+                                  <Badge variant="outline" className="text-xs border-green-500 text-green-500">
                                     Auth
                                   </Badge>
                                 )}
@@ -1379,10 +1418,10 @@ export function ServiceLevelsEnhanced() {
                                 <div className="flex items-center gap-1 text-xs">
                                   <SignalIcon 
                                     className={`h-4 w-4 ${
-                                      signalQuality === 'excellent' ? 'text-green-600' :
+                                      signalQuality === 'excellent' ? 'text-green-500' :
                                       signalQuality === 'good' ? 'text-blue-600' :
-                                      signalQuality === 'fair' ? 'text-yellow-600' :
-                                      'text-red-600'
+                                      signalQuality === 'fair' ? 'text-amber-500' :
+                                      'text-red-500'
                                     }`}
                                   />
                                   <span>{rssi} dBm</span>
@@ -1412,10 +1451,10 @@ export function ServiceLevelsEnhanced() {
 
           {/* Utilization Warning */}
           {serviceStations.length > 50 && (
-            <Card className="border-yellow-500">
+            <Card className="border-amber-500">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
                   High Utilization Detected
                 </CardTitle>
                 <CardDescription>This service is experiencing heavy load</CardDescription>
@@ -1633,7 +1672,7 @@ export function ServiceLevelsEnhanced() {
                 <CardContent className="space-y-4">
                   <div>
                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                      <Download className="h-4 w-4 text-green-600" />
+                      <Download className="h-4 w-4 text-green-500" />
                       Upload (TX)
                     </h4>
                     <div className="ml-6 space-y-1">

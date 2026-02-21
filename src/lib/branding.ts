@@ -15,16 +15,16 @@ export interface BrandConfig {
 
 export const branding: Record<ThemeMode, BrandConfig> = {
   default: {
-    name: 'AIO',
-    fullName: 'Extreme Platform ONE | AIO',
-    tagline: 'AI-Informed Orchestration',
+    name: 'API',
+    fullName: 'API',
+    tagline: 'Autonomous Platform Intelligence',
     logo: '/logo.svg',
     icon: '/favicon.ico'
   },
   dark: {
-    name: 'AIO',
-    fullName: 'Extreme Platform ONE | AIO',
-    tagline: 'AI-Informed Orchestration',
+    name: 'API',
+    fullName: 'API',
+    tagline: 'Autonomous Platform Intelligence',
     logo: '/logo.svg',
     icon: '/favicon.ico'
   }

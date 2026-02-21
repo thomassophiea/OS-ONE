@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -9,7 +9,7 @@ import { DetailSlideOut } from './DetailSlideOut';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { AlertCircle, Wifi, Search, RefreshCw, Filter, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Building, Info, Columns, Anchor, Phone, FileDown, Radio } from 'lucide-react';
+import { AlertCircle, Wifi, Search, RefreshCw, Filter, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Building, Info, Columns, Anchor, Phone, FileDown, Radio, Cable } from 'lucide-react';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -19,6 +19,347 @@ import { Skeleton } from './ui/skeleton';
 import { apiService, AccessPoint, APDetails, APStation, APQueryColumn, Site } from '../services/api';
 import { toast } from 'sonner';
 import { SaveToWorkspace } from './SaveToWorkspace';
+
+// Cable health detection utilities
+interface CableHealthResult {
+  status: 'good' | 'warning' | 'critical' | 'unknown';
+  speedMbps: number | null;
+  speedDisplay: string;
+  expectedSpeedMbps: number;
+  message: string;
+  otherAPsOnSwitch?: { good: number; bad: number };
+  issues: CableIssue[];
+  duplexMode?: string;
+  portName?: string;
+}
+
+interface CableIssue {
+  type: 'speed_degraded' | 'speed_critical' | 'duplex_mismatch' | 'poe_issue' | 'low_power';
+  severity: 'warning' | 'critical';
+  description: string;
+  recommendation: string;
+}
+
+/**
+ * Get the actual negotiated ethernet speed and duplex mode from AP data
+ * Checks ALL ports in ethPorts array and finds the one with valid speed
+ * (some APs use eth1 as uplink, not eth0)
+ * Handles formats like: "speed5Gbps", "speed100Mbps", "speedNA", "speedAuto"
+ */
+function getActualEthSpeed(ap: any): {
+  speedMbps: number | null;
+  speedDisplay: string;
+  portName?: string;
+  duplexMode?: string;
+} {
+  // Check all ports in ethPorts array to find one with valid speed
+  if (ap.ethPorts && Array.isArray(ap.ethPorts) && ap.ethPorts.length > 0) {
+    // First pass: find any port with valid numeric speed (not speedNA)
+    for (const port of ap.ethPorts) {
+      if (port && port.speed) {
+        const parsed = parseSpeedString(port.speed);
+        if (parsed.speedMbps !== null) {
+          return {
+            ...parsed,
+            portName: port.name || 'eth',
+            duplexMode: port.mode || port.duplex || ap.ethMode
+          };
+        }
+      }
+    }
+  }
+
+  // Fallback to ethSpeed field
+  if (ap.ethSpeed) {
+    const parsed = parseSpeedString(ap.ethSpeed);
+    return { ...parsed, duplexMode: ap.ethMode };
+  }
+
+  return { speedMbps: null, speedDisplay: 'Unknown' };
+}
+
+/**
+ * Parse ethernet speed string to Mbps
+ * Handles formats like: "speed5Gbps", "speed100Mbps", "1Gbps", "100Mbps", "speedNA", "speedAuto"
+ */
+function parseSpeedString(speedStr: string | undefined | null): { speedMbps: number | null; speedDisplay: string } {
+  if (!speedStr || speedStr === '-') {
+    return { speedMbps: null, speedDisplay: 'Unknown' };
+  }
+
+  const speed = String(speedStr).toLowerCase().trim();
+
+  // Handle "speedNA" or "speedAuto" - these mean we can't determine actual speed
+  if (speed === 'speedna' || speed === 'speedauto' || speed === 'na' || speed === 'auto') {
+    return { speedMbps: null, speedDisplay: speedStr };
+  }
+
+  // Handle "speed5Gbps", "speed100Mbps", "speed1Gbps" format
+  const speedPrefixMatch = speed.match(/speed([\d.]+)(g|m)/i);
+  if (speedPrefixMatch) {
+    const value = parseFloat(speedPrefixMatch[1]);
+    const unit = speedPrefixMatch[2].toLowerCase();
+    const mbps = unit === 'g' ? value * 1000 : value;
+    const display = unit === 'g' ? `${value}Gbps` : `${value}Mbps`;
+    return { speedMbps: mbps, speedDisplay: display };
+  }
+
+  // Handle "5Gbps", "100Mbps" format (without "speed" prefix)
+  const gbpsMatch = speed.match(/([\d.]+)\s*g/i);
+  if (gbpsMatch) {
+    const value = parseFloat(gbpsMatch[1]);
+    return { speedMbps: value * 1000, speedDisplay: `${value}Gbps` };
+  }
+
+  const mbpsMatch = speed.match(/([\d.]+)\s*m/i);
+  if (mbpsMatch) {
+    const value = parseFloat(mbpsMatch[1]);
+    return { speedMbps: value, speedDisplay: `${value}Mbps` };
+  }
+
+  // Handle plain number (assume Mbps)
+  const numMatch = speed.match(/^(\d+)$/);
+  if (numMatch) {
+    const value = parseInt(numMatch[1], 10);
+    return { speedMbps: value, speedDisplay: `${value}Mbps` };
+  }
+
+  return { speedMbps: null, speedDisplay: speedStr };
+}
+
+/**
+ * Determine expected ethernet speed based on AP model
+ * WiFi 6E/6 APs typically have multi-gig ports, WiFi 5 APs have 1Gbps
+ */
+function getExpectedSpeed(model: string | undefined): number {
+  if (!model) return 1000; // Default to 1Gbps
+
+  const m = model.toUpperCase();
+
+  // WiFi 6E / WiFi 7 APs - typically have 2.5Gbps or 5Gbps ports
+  if (m.includes('AP6') || m.includes('AP7') || m.includes('635') || m.includes('655') ||
+      m.includes('735') || m.includes('755') || m.includes('OAW-AP13') || m.includes('OAW-AP15')) {
+    return 2500; // 2.5Gbps expected
+  }
+
+  // WiFi 6 APs - typically 1Gbps or 2.5Gbps
+  if (m.includes('AP5') || m.includes('515') || m.includes('535') || m.includes('555') ||
+      m.includes('OAW-AP12') || m.includes('OAW-AP11')) {
+    return 1000; // 1Gbps expected
+  }
+
+  // Older APs
+  return 1000;
+}
+
+/**
+ * Extract switch identifier from switchPorts field
+ * Can be: array like ["46:SW-4220", ""] or string like "switch-serial:port"
+ */
+function extractSwitchId(switchPorts: string | string[] | undefined): string | null {
+  if (!switchPorts) return null;
+
+  // Handle array format: ["46:SW-4220", ""]
+  if (Array.isArray(switchPorts)) {
+    const firstPort = switchPorts.find(p => p && p.trim() !== '');
+    if (!firstPort) return null;
+    // Extract switch name from "46:SW-4220" format -> "sw-4220"
+    const parts = firstPort.split(':');
+    if (parts.length >= 2) {
+      return parts[1].trim().toLowerCase();
+    }
+    return firstPort.trim().toLowerCase();
+  }
+
+  // Handle string format
+  if (switchPorts === '-') return null;
+
+  // Try common formats: "SWITCH123:1/0/1", "switch-name/ge-0/0/1"
+  const colonMatch = switchPorts.match(/^([^:\/]+)/);
+  if (colonMatch) return colonMatch[1].trim().toLowerCase();
+
+  return switchPorts.toLowerCase().trim();
+}
+
+/**
+ * Check if duplex mode indicates a problem
+ * Half duplex on a modern network typically indicates cable issues or switch misconfiguration
+ */
+function isDuplexIssue(duplexMode: string | undefined): boolean {
+  if (!duplexMode) return false;
+  const mode = duplexMode.toLowerCase();
+  return mode.includes('half') || mode === 'halfduplex' || mode === 'half-duplex';
+}
+
+/**
+ * Check if PoE status indicates a cable issue
+ * Low power delivery can indicate high resistance from damaged cable
+ */
+function getPoEIssue(ap: any): { hasIssue: boolean; description: string } | null {
+  const powerStatus = ap.ethPowerStatus?.toLowerCase() || '';
+  const powerMode = ap.powerMode?.toLowerCase() || '';
+  const lowPower = ap.lowPower === true;
+
+  // Check for explicit low power indicators
+  if (lowPower || powerMode.includes('low') || powerMode.includes('reduced')) {
+    return {
+      hasIssue: true,
+      description: 'AP running in low power mode - may indicate high cable resistance'
+    };
+  }
+
+  // Check PoE status for issues
+  if (powerStatus.includes('low') || powerStatus.includes('insufficient') ||
+      powerStatus.includes('fault') || powerStatus.includes('error')) {
+    return {
+      hasIssue: true,
+      description: `PoE issue detected: ${ap.ethPowerStatus}`
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Analyze cable health for an AP using multiple indicators:
+ * 1. Speed degradation (primary indicator)
+ * 2. Duplex mismatch (half when full expected)
+ * 3. PoE/power issues (high resistance indication)
+ * 4. Comparison with other APs on same switch
+ */
+function analyzeCableHealth(
+  ap: AccessPoint,
+  allAPs: AccessPoint[]
+): CableHealthResult {
+  const apAny = ap as any;
+  const { speedMbps, speedDisplay, portName, duplexMode } = getActualEthSpeed(apAny);
+  const expectedSpeedMbps = getExpectedSpeed(ap.model || apAny.hardwareType || apAny.platformName);
+  const issues: CableIssue[] = [];
+
+  // If we can't determine speed, return unknown
+  if (speedMbps === null) {
+    return {
+      status: 'unknown',
+      speedMbps: null,
+      speedDisplay,
+      expectedSpeedMbps,
+      message: 'Ethernet speed not available',
+      issues: [],
+      duplexMode,
+      portName
+    };
+  }
+
+  // Check if AP is on a switch and compare with others
+  const switchId = extractSwitchId(apAny.switchPorts);
+  let otherAPsOnSwitch: { good: number; bad: number } | undefined;
+
+  if (switchId) {
+    const apsOnSameSwitch = allAPs.filter(other => {
+      if (other.serialNumber === ap.serialNumber) return false;
+      const otherSwitch = extractSwitchId((other as any).switchPorts);
+      return otherSwitch === switchId;
+    });
+
+    if (apsOnSameSwitch.length > 0) {
+      const goodAPs = apsOnSameSwitch.filter(other => {
+        const { speedMbps: otherSpeed } = getActualEthSpeed(other as any);
+        return otherSpeed !== null && otherSpeed >= 1000;
+      });
+      const badAPs = apsOnSameSwitch.filter(other => {
+        const { speedMbps: otherSpeed } = getActualEthSpeed(other as any);
+        return otherSpeed !== null && otherSpeed < 1000;
+      });
+
+      otherAPsOnSwitch = { good: goodAPs.length, bad: badAPs.length };
+    }
+  }
+
+  // Issue 1: Critical speed degradation (10Mbps or less)
+  if (speedMbps <= 10) {
+    issues.push({
+      type: 'speed_critical',
+      severity: 'critical',
+      description: `Critical: ${speedDisplay} link detected`,
+      recommendation: 'Multiple cable pairs likely damaged. Replace the entire cable and check both RJ45 connectors for damage.'
+    });
+  }
+  // Issue 2: Speed degradation (100Mbps when gigabit expected)
+  else if (speedMbps <= 100 && speedMbps < expectedSpeedMbps) {
+    issues.push({
+      type: 'speed_degraded',
+      severity: 'warning',
+      description: `Speed degraded: ${speedDisplay} (expected ${expectedSpeedMbps >= 1000 ? `${expectedSpeedMbps/1000}Gbps` : `${expectedSpeedMbps}Mbps`})`,
+      recommendation: 'Check blue pair (pins 4,5) and brown pair (pins 7,8) on both ends. These outer pairs are most commonly damaged and only needed for gigabit.'
+    });
+  }
+
+  // Issue 3: Duplex mismatch
+  if (isDuplexIssue(duplexMode)) {
+    issues.push({
+      type: 'duplex_mismatch',
+      severity: 'warning',
+      description: `Half duplex detected (${duplexMode})`,
+      recommendation: 'Half duplex indicates cable quality issues or switch port misconfiguration. Check for cable damage, excessive length (>100m), or switch port settings.'
+    });
+  }
+
+  // Issue 4: PoE/Power issues
+  const poeIssue = getPoEIssue(apAny);
+  if (poeIssue) {
+    issues.push({
+      type: 'poe_issue',
+      severity: 'warning',
+      description: poeIssue.description,
+      recommendation: 'High cable resistance reduces power delivery. Check for corroded connectors, damaged cable, or excessive cable length.'
+    });
+  }
+
+  // Issue 5: Low power mode (may indicate cable-related power issues)
+  if (apAny.lowPower === true && !poeIssue) {
+    issues.push({
+      type: 'low_power',
+      severity: 'warning',
+      description: 'AP operating in low power mode',
+      recommendation: 'May be due to PoE budget constraints or cable resistance. Verify PoE source capacity and cable quality.'
+    });
+  }
+
+  // Determine overall status based on issues
+  let status: 'good' | 'warning' | 'critical' = 'good';
+  if (issues.some(i => i.severity === 'critical')) {
+    status = 'critical';
+  } else if (issues.length > 0) {
+    status = 'warning';
+  }
+
+  // Build message
+  let message = '';
+  if (issues.length === 0) {
+    message = `${speedDisplay} - Good`;
+  } else if (issues.length === 1) {
+    message = issues[0].description;
+  } else {
+    message = `Multiple issues detected: ${issues.map(i => i.type.replace('_', ' ')).join(', ')}`;
+  }
+
+  // Add switch context to message
+  if (status !== 'good' && otherAPsOnSwitch && otherAPsOnSwitch.good > 0) {
+    message += ` (${otherAPsOnSwitch.good} other APs on same switch have good rates - issue isolated to this cable)`;
+  }
+
+  return {
+    status,
+    speedMbps,
+    speedDisplay,
+    expectedSpeedMbps,
+    message,
+    otherAPsOnSwitch,
+    issues,
+    duplexMode,
+    portName
+  };
+}
 
 // Define available columns with friendly labels
 interface ColumnConfig {
@@ -39,6 +380,7 @@ const AVAILABLE_COLUMNS: ColumnConfig[] = [
   { key: 'clients', label: 'Connected Clients', defaultVisible: true, category: 'basic' },
 
   // Network columns
+  { key: 'cableHealth', label: 'Cable Health', defaultVisible: false, category: 'network' },
   { key: 'macAddress', label: 'MAC Address', defaultVisible: false, category: 'network' },
   { key: 'ethMode', label: 'Ethernet Mode', defaultVisible: false, category: 'network' },
   { key: 'ethSpeed', label: 'Ethernet Speed', defaultVisible: false, category: 'network' },
@@ -127,6 +469,15 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
   const [isColumnDialogOpen, setIsColumnDialogOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Compute cable health for all APs (memoized for performance)
+  const cableHealthMap = useMemo(() => {
+    const healthMap: Record<string, CableHealthResult> = {};
+    accessPoints.forEach(ap => {
+      healthMap[ap.serialNumber] = analyzeCableHealth(ap, accessPoints);
+    });
+    return healthMap;
+  }, [accessPoints]);
 
   useEffect(() => {
     loadData();
@@ -264,6 +615,27 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
       const accessPointsArray = Array.isArray(apsData) ? apsData : [];
 
+      // Debug: Log ethernet data for specific AP and all APs
+      if (accessPointsArray.length > 0) {
+        // Log specific AP we're investigating
+        const targetAP = accessPointsArray.find((ap: any) => ap.serialNumber === 'CV012408S-C0102');
+        if (targetAP) {
+          console.log('[AP Debug] CV012408S-C0102 ethPorts:', (targetAP as any).ethPorts);
+          console.log('[AP Debug] CV012408S-C0102 ethSpeed:', (targetAP as any).ethSpeed);
+          console.log('[AP Debug] CV012408S-C0102 status:', (targetAP as any).status);
+          console.log('[AP Debug] CV012408S-C0102 full data:', JSON.stringify(targetAP, null, 2));
+        } else {
+          console.log('[AP Debug] CV012408S-C0102 not found in AP list');
+        }
+
+        // Log all APs ethPorts for comparison
+        console.log('[AP Debug] All APs ethernet data:');
+        accessPointsArray.forEach((ap: any) => {
+          const speed = ap.ethPorts?.[0]?.speed || ap.ethSpeed || 'N/A';
+          console.log(`  ${ap.apName || ap.serialNumber}: ethPorts[0].speed=${ap.ethPorts?.[0]?.speed}, ethSpeed=${ap.ethSpeed}, status=${ap.status}`);
+        });
+      }
+
       // Map sysUptime to uptime field and format it
       const enrichedAPs = accessPointsArray.map(ap => ({
         ...ap,
@@ -290,7 +662,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         setError(errorMessage);
       } else {
         // For timeout errors, show a user-friendly message
-        setError('Loading access points is taking longer than expected. Extreme Platform ONE may be slow to respond.');
+        setError('Loading access points is taking longer than expected. The controller may be slow to respond.');
       }
     } finally {
       setIsLoading(false);
@@ -394,6 +766,23 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           // Log first AP details to see available fields
           if (aps.indexOf(ap) === 0) {
             console.log('[AP Metrics] Sample AP details fields:', Object.keys(details));
+            // Log any ethernet/link/port related fields
+            const ethFields = Object.entries(details).filter(([key]) =>
+              /eth|speed|link|port|cable|duplex|nego|phy|lan|uplink/i.test(key)
+            );
+            console.log('[AP Metrics] Ethernet-related fields found:', ethFields);
+            // Log any CPU/memory related fields
+            const cpuMemFields = Object.entries(details).filter(([key]) =>
+              /cpu|mem|util|usage|percent|load|ram/i.test(key)
+            );
+            console.log('[AP Metrics] CPU/Memory-related fields found:', cpuMemFields);
+            // Log all fields with numeric values between 0-100 (potential percentage metrics)
+            const percentFields = Object.entries(details).filter(([, value]) =>
+              typeof value === 'number' && value >= 0 && value <= 100
+            );
+            console.log('[AP Metrics] Numeric fields 0-100 (potential %):', percentFields);
+            // Log full first AP data for debugging
+            console.log('[AP Metrics] Full AP data sample:', JSON.stringify(details, null, 2).substring(0, 5000));
           }
           return {
             serialNumber: ap.serialNumber,
@@ -579,6 +968,14 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         return (apAny.description || '').toLowerCase();
       case 'afcAnchor':
         return isAfcAnchor(ap) ? 1 : 0;
+      case 'cableHealth':
+        // Sort by severity: critical=0, warning=1, unknown=2, good=3
+        const health = cableHealthMap[ap.serialNumber];
+        if (!health) return 2;
+        if (health.status === 'critical') return 0;
+        if (health.status === 'warning') return 1;
+        if (health.status === 'unknown') return 2;
+        return 3;
       default:
         return '';
     }
@@ -888,7 +1285,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </TooltipTrigger>
           <TooltipContent>
             <p className="font-medium">Online</p>
-            <p className="text-xs opacity-80">Access Point is connected and operational</p>
+            <p className="opacity-80">Access Point is connected and operational</p>
           </TooltipContent>
         </Tooltip>
       );
@@ -900,7 +1297,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </TooltipTrigger>
           <TooltipContent>
             <p className="font-medium">Offline</p>
-            <p className="text-xs opacity-80">Access Point is not responding or disconnected</p>
+            <p className="opacity-80">Access Point is not responding or disconnected</p>
           </TooltipContent>
         </Tooltip>
       );
@@ -1004,6 +1401,8 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       case 'connection':
         return <div className="flex items-center justify-center">{getConnectionStatusIcon(ap)}</div>;
       case 'apName':
+        const apCableHealth = cableHealthMap[ap.serialNumber];
+        const apIsOnline = isAPOnline(ap);
         return (
           <div className="flex items-center gap-2">
             <span>{getAPName(ap)}</span>
@@ -1014,7 +1413,48 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="font-medium">AFC Anchor</p>
-                  <p className="text-xs opacity-80">6 GHz Standard Power - This AP provides GPS location for AFC (Automated Frequency Coordination)</p>
+                  <p className="opacity-80">6 GHz Standard Power - This AP provides GPS location for AFC (Automated Frequency Coordination)</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {/* Cable Health Icon - only show when there's a problem (warning/critical) */}
+            {apCableHealth && (apCableHealth.status === 'warning' || apCableHealth.status === 'critical') && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Cable className={`h-4 w-4 cursor-help ${apCableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`} />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" sideOffset={5}>
+                  <div className="max-w-xs">
+                    {/* Header */}
+                    <p className={`font-semibold ${apCableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                      {apCableHealth.status === 'critical' ? 'Bad Cable Detected' : 'Possible Cable Issue'}
+                    </p>
+
+                    {/* Speed info */}
+                    <p className="mt-1">
+                      <span className={apCableHealth.status === 'critical' ? 'text-red-400' : 'text-amber-400'}>
+                        {apCableHealth.speedDisplay}
+                      </span>
+                      {' '}(expected{' '}
+                      <span className="text-green-400">
+                        {apCableHealth.expectedSpeedMbps >= 1000 ? `${apCableHealth.expectedSpeedMbps/1000}Gbps` : `${apCableHealth.expectedSpeedMbps}Mbps`}
+                      </span>)
+                    </p>
+
+                    {/* Recommendation */}
+                    {apCableHealth.issues && apCableHealth.issues.length > 0 && (
+                      <p className="text-xs mt-2 text-blue-400">
+                        <span className="font-medium">Fix:</span> {apCableHealth.issues[0].recommendation}
+                      </p>
+                    )}
+
+                    {/* Switch comparison */}
+                    {apCableHealth.otherAPsOnSwitch && apCableHealth.otherAPsOnSwitch.good > 0 && (
+                      <p className="mt-1 text-emerald-400">
+                        {apCableHealth.otherAPsOnSwitch.good} other APs on switch OK - issue is this cable
+                      </p>
+                    )}
+                  </div>
                 </TooltipContent>
               </Tooltip>
             )}
@@ -1046,7 +1486,78 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       case 'ethMode':
         return <span className="text-sm">{(ap as any).ethMode || '-'}</span>;
       case 'ethSpeed':
-        return <span className="text-sm">{(ap as any).ethSpeed || '-'}</span>;
+        const ethHealth = cableHealthMap[ap.serialNumber];
+        const ethSpeedValue = (ap as any).ethSpeed || '-';
+        if (ethHealth && (ethHealth.status === 'warning' || ethHealth.status === 'critical')) {
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className={`text-sm flex items-center gap-1 ${ethHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                  <AlertTriangle className="h-3 w-3" />
+                  {ethSpeedValue}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <p>{ethHealth.message}</p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+        return <span className="text-sm">{ethSpeedValue}</span>;
+      case 'cableHealth':
+        const cableHealth = cableHealthMap[ap.serialNumber];
+        if (!cableHealth || cableHealth.status === 'unknown') {
+          return <span className="text-sm text-muted-foreground">-</span>;
+        }
+        if (cableHealth.status === 'good') {
+          return (
+            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Good
+            </Badge>
+          );
+        }
+        if (cableHealth.status === 'warning') {
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 cursor-help">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  Warning
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-sm">
+                <p className="font-medium mb-1">Possible Cable Issue</p>
+                <p>{cableHealth.message}</p>
+                {cableHealth.otherAPsOnSwitch && cableHealth.otherAPsOnSwitch.good > 0 && (
+                  <p className="mt-1 text-amber-400">
+                    Other APs on same switch have good rates - issue likely isolated to this cable
+                  </p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+        // Critical
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="destructive" className="cursor-help">
+                <XCircle className="h-3 w-3 mr-1" />
+                Bad Cable
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-sm">
+              <p className="font-medium mb-1">Likely Cable Problem</p>
+              <p>{cableHealth.message}</p>
+              {cableHealth.otherAPsOnSwitch && cableHealth.otherAPsOnSwitch.good > 0 && (
+                <p className="mt-1 text-red-300">
+                  {cableHealth.otherAPsOnSwitch.good} other APs on same switch have good rates - issue is with this cable/connector
+                </p>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        );
       case 'tunnel':
         return <span className="text-sm">{(ap as any).tunnel || '-'}</span>;
       case 'wiredClients':
@@ -1099,7 +1610,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">{isLoadingMetrics ? 'Loading CPU data...' : 'CPU data not available. Click AP for details.'}</p>
+                <p>{isLoadingMetrics ? 'Loading CPU data...' : 'CPU data not available. Click AP for details.'}</p>
               </TooltipContent>
             </Tooltip>
           );
@@ -1110,18 +1621,18 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <div className="flex items-center gap-2 cursor-help">
                 <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all ${cpuValue > 80 ? 'bg-red-500' : cpuValue > 60 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                    className={`h-full transition-all ${cpuValue > 80 ? 'bg-red-500' : cpuValue > 60 ? 'bg-amber-500' : 'bg-green-500'}`}
                     style={{ width: `${Math.min(cpuValue, 100)}%` }}
                   />
                 </div>
-                <span className={`text-sm font-medium ${cpuValue > 80 ? 'text-red-600' : cpuValue > 60 ? 'text-yellow-600' : ''}`}>
+                <span className={`text-sm font-medium ${cpuValue > 80 ? 'text-red-500' : cpuValue > 60 ? 'text-amber-500' : ''}`}>
                   {cpuValue}%
                 </span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
               <p className="font-medium">CPU Utilization</p>
-              <p className="text-xs opacity-80">{cpuValue > 80 ? 'High load - may impact performance' : cpuValue > 60 ? 'Moderate load' : 'Normal operation'}</p>
+              <p className="opacity-80">{cpuValue > 80 ? 'High load - may impact performance' : cpuValue > 60 ? 'Moderate load' : 'Normal operation'}</p>
             </TooltipContent>
           </Tooltip>
         );
@@ -1139,7 +1650,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">{isLoadingMetrics ? 'Loading memory data...' : 'Memory data not available. Click AP for details.'}</p>
+                <p>{isLoadingMetrics ? 'Loading memory data...' : 'Memory data not available. Click AP for details.'}</p>
               </TooltipContent>
             </Tooltip>
           );
@@ -1150,18 +1661,18 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <div className="flex items-center gap-2 cursor-help">
                 <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all ${memValue > 85 ? 'bg-red-500' : memValue > 70 ? 'bg-yellow-500' : 'bg-blue-500'}`}
+                    className={`h-full transition-all ${memValue > 85 ? 'bg-red-500' : memValue > 70 ? 'bg-amber-500' : 'bg-blue-500'}`}
                     style={{ width: `${Math.min(memValue, 100)}%` }}
                   />
                 </div>
-                <span className={`text-sm font-medium ${memValue > 85 ? 'text-red-600' : memValue > 70 ? 'text-yellow-600' : ''}`}>
+                <span className={`text-sm font-medium ${memValue > 85 ? 'text-red-500' : memValue > 70 ? 'text-amber-500' : ''}`}>
                   {memValue}%
                 </span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
               <p className="font-medium">Memory Utilization</p>
-              <p className="text-xs opacity-80">{memValue > 85 ? 'High memory usage - may cause issues' : memValue > 70 ? 'Elevated memory usage' : 'Normal memory usage'}</p>
+              <p className="opacity-80">{memValue > 85 ? 'High memory usage - may cause issues' : memValue > 70 ? 'Elevated memory usage' : 'Normal memory usage'}</p>
             </TooltipContent>
           </Tooltip>
         );
@@ -1176,7 +1687,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             </TooltipTrigger>
             <TooltipContent>
               <p className="font-medium">AFC Anchor</p>
-              <p className="text-xs opacity-80">This AP has GPS and provides location data for AFC (Automated Frequency Coordination) to enable 6 GHz Standard Power operation</p>
+              <p className="opacity-80">This AP has GPS and provides location data for AFC (Automated Frequency Coordination) to enable 6 GHz Standard Power operation</p>
             </TooltipContent>
           </Tooltip>
         ) : (
@@ -1284,6 +1795,61 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Cable Health Alert Banner */}
+      {(() => {
+        const criticalAPs = accessPoints.filter(ap => cableHealthMap[ap.serialNumber]?.status === 'critical');
+        const warningAPs = accessPoints.filter(ap => cableHealthMap[ap.serialNumber]?.status === 'warning');
+
+        if (criticalAPs.length === 0 && warningAPs.length === 0) return null;
+
+        return (
+          <Alert variant={criticalAPs.length > 0 ? 'destructive' : 'default'} className={criticalAPs.length > 0 ? 'border-red-500 bg-red-500/10' : 'border-amber-500 bg-amber-500/10'}>
+            <Cable className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between w-full">
+              <div>
+                <span className="font-semibold">
+                  {criticalAPs.length > 0 ? 'Cable Issues Detected' : 'Potential Cable Issues'}
+                </span>
+                <span className="ml-2">
+                  {criticalAPs.length > 0 && (
+                    <Badge variant="destructive" className="mr-2">
+                      {criticalAPs.length} Critical
+                    </Badge>
+                  )}
+                  {warningAPs.length > 0 && (
+                    <Badge variant="outline" className="bg-amber-500/20 text-amber-500 border-amber-500/50">
+                      {warningAPs.length} Warning
+                    </Badge>
+                  )}
+                </span>
+                <p className="mt-1 text-muted-foreground">
+                  {criticalAPs.length > 0
+                    ? `APs negotiating at 10Mbps - likely bad cables: ${criticalAPs.map(ap => (ap as any).apName || ap.serialNumber).join(', ')}`
+                    : `APs with degraded link speed: ${warningAPs.map(ap => (ap as any).apName || ap.serialNumber).join(', ')}`
+                  }
+                </p>
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" className="ml-4">
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-sm">
+                  <p className="font-medium mb-1">AI Insight</p>
+                  <p>
+                    {criticalAPs.length > 0
+                      ? 'A 10Mbps link indicates multiple damaged cable pairs. Check both RJ45 connectors for damage, especially the blue pair (pins 4,5) and brown pair (pins 7,8). Consider replacing the cable.'
+                      : 'A 100Mbps link on gigabit APs usually means one cable pair is damaged. Check the blue pair (pins 4,5) or brown pair (pins 7,8) - these pairs are only used for gigabit speeds and damage often goes unnoticed.'
+                    }
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </AlertDescription>
+          </Alert>
+        );
+      })()}
 
       {/* Column Customization Dialog */}
       <DetailSlideOut
@@ -1494,7 +2060,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                   <span className="text-sm font-medium">Offline</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-red-600">
+                  <span className="text-xl font-bold text-red-500">
                     {accessPoints.filter(ap => !isAPOnline(ap)).length}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -1577,7 +2143,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                     className="relative p-1 hover:opacity-80 transition-opacity cursor-pointer"
                   >
                     <span className="absolute inset-0 bg-red-500/30 rounded-full animate-ping" />
-                    <Settings className="h-4 w-4 text-red-600 relative animate-[spin_4s_linear_infinite]" />
+                    <Settings className="h-4 w-4 text-red-500 relative animate-[spin_4s_linear_infinite]" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -1588,7 +2154,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 onClick={handleDownloadBSSIDs}
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-red-500/50 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                className="h-7 text-xs border-red-500/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
                 disabled={filteredAccessPoints.length === 0}
               >
                 <FileDown className="mr-1 h-3 w-3" />
@@ -1598,7 +2164,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 onClick={handleDownloadBSSIDsJSON}
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-red-500/50 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+                className="h-7 text-xs border-red-500/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
                 disabled={filteredAccessPoints.length === 0}
               >
                 <Download className="mr-1 h-3 w-3" />
@@ -1653,7 +2219,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <SelectContent>
                 <SelectItem value="all">All Sites</SelectItem>
                 {sites.map((site) => (
-                  <SelectItem key={site.id} value={site.name || site.siteName || site.id}>
+                  <SelectItem key={site.id} value={site.id}>
                     {site.name || site.siteName} {site.aps ? `(${site.aps} APs)` : ''}
                   </SelectItem>
                 ))}
@@ -1887,7 +2453,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                             <DropdownMenuItem
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                if (confirm(`Delete ${getAPName(ap)}? This will remove the AP from Extreme Platform ONE.`)) {
+                                if (confirm(`Delete ${getAPName(ap)}? This will remove the AP from the controller.`)) {
                                   try {
                                     await apiService.deleteAP(ap.serialNumber);
                                     toast.success('AP deleted successfully');

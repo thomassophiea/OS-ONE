@@ -23,6 +23,7 @@ const prefetchCriticalComponents = () => {
   }, 2000); // Delay to not block initial render
 };
 const ServiceLevelsEnhanced = lazy(() => import('./components/ServiceLevelsEnhanced').then(m => ({ default: m.ServiceLevelsEnhanced })));
+const SLEDashboard = lazy(() => import('./components/sle/SLEDashboard').then(m => ({ default: m.SLEDashboard })));
 const AlertsEventsEnhanced = lazy(() => import('./components/AlertsEventsEnhanced').then(m => ({ default: m.AlertsEventsEnhanced })));
 const ReportWidgets = lazy(() => import('./components/ReportWidgets').then(m => ({ default: m.ReportWidgets })));
 const ConfigureNetworks = lazy(() => import('./components/ConfigureNetworks').then(m => ({ default: m.ConfigureNetworks })));
@@ -31,6 +32,7 @@ const ConfigurePolicy = lazy(() => import('./components/ConfigurePolicy').then(m
 const ConfigureAAAPolicies = lazy(() => import('./components/ConfigureAAAPolicies').then(m => ({ default: m.ConfigureAAAPolicies })));
 const ConfigureAdoptionRules = lazy(() => import('./components/ConfigureAdoptionRules').then(m => ({ default: m.ConfigureAdoptionRules })));
 const ConfigureGuest = lazy(() => import('./components/ConfigureGuest').then(m => ({ default: m.ConfigureGuest })));
+const ConfigureAdvanced = lazy(() => import('./components/ConfigureAdvanced').then(m => ({ default: m.ConfigureAdvanced })));
 const Administration = lazy(() => import('./components/Administration').then(m => ({ default: m.Administration })));
 const Tools = lazy(() => import('./components/Tools').then(m => ({ default: m.Tools })));
 const ApiTestTool = lazy(() => import('./components/ApiTestTool').then(m => ({ default: m.ApiTestTool })));
@@ -50,6 +52,7 @@ const GuestManagement = lazy(() => import('./components/GuestManagement').then(m
 const ApiDocumentation = lazy(() => import('./components/ApiDocumentation').then(m => ({ default: m.ApiDocumentation })));
 const Workspace = lazy(() => import('./components/Workspace').then(m => ({ default: m.Workspace })));
 const HelpPage = lazy(() => import('./components/HelpPage').then(m => ({ default: m.HelpPage })));
+const SynthwaveMusicPlayer = lazy(() => import('./components/SynthwaveMusicPlayer').then(m => ({ default: m.SynthwaveMusicPlayer })));
 import { apiService, ApiCallLog } from './services/api';
 import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
@@ -67,6 +70,7 @@ import { useDeviceDetection } from './hooks/useDeviceDetection';
 const pageInfo = {
   'workspace': { title: 'Workspace', description: 'Create custom widgets for Devices, Clients, Licensing, and Alerts' },
   'service-levels': { title: 'Contextual Insights', description: 'Context-aware network monitoring and analytics' },
+  'sle-dashboard': { title: 'Service Levels', description: 'SLE metrics with drill-down classifier analysis' },
   'app-insights': { title: 'App Insights', description: 'Application visibility and traffic analytics' },
   'connected-clients': { title: 'Connected Clients', description: 'View and manage connected devices' },
   'access-points': { title: 'Access Points', description: 'Manage and monitor wireless access points' },
@@ -87,10 +91,11 @@ const pageInfo = {
   'security-dashboard': { title: 'Security Dashboard', description: 'Rogue AP detection and security threat monitoring' },
   'guest-management': { title: 'Guest Access', description: 'Manage guest wireless access accounts' },
   'administration': { title: 'Administration', description: 'System administration, users, applications, and licensing' },
-  'api-test': { title: 'API Test Tool', description: 'Test and explore AIO API endpoints' },
-  'api-documentation': { title: 'API Documentation', description: 'AIO Platform REST API reference' },
+  'api-test': { title: 'API Test Tool', description: 'Test and explore API endpoints' },
+  'api-documentation': { title: 'API Documentation', description: 'API Platform REST API reference' },
   'configure-sites': { title: 'Sites', description: 'Manage and configure network sites and locations' },
   'configure-networks': { title: 'Configure Networks', description: 'Set up and manage network configurations' },
+  'configure-advanced': { title: 'Advanced Configuration', description: 'Topologies, QoS, AP Profiles, IoT, Mesh, Access Control, and Location Services' },
   'help': { title: 'Help & Support', description: 'Get assistance with the EDGE platform using AI' },
 };
 
@@ -102,17 +107,18 @@ interface DetailPanelState {
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentPage, setCurrentPage] = useState('workspace');
+  const [currentPage, setCurrentPage] = useState('sle-dashboard');
   const [adminRole, setAdminRole] = useState<string | null>(null);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('system');
+  const [theme, setTheme] = useState<'light' | 'dark' | 'synthwave' | 'system'>('system');
   const [detailPanel, setDetailPanel] = useState<DetailPanelState>({
     isOpen: false,
     type: null,
     data: null
   });
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+  const [isMusicPlayerDismissed, setIsMusicPlayerDismissed] = useState(false);
   const [networkAssistantEnabled, setNetworkAssistantEnabled] = useState(() => {
     // Default to false - hidden by default
     return localStorage.getItem('networkAssistantEnabled') === 'true';
@@ -179,7 +185,7 @@ export default function App() {
   useEffect(() => {
     // Initialize theme from localStorage or system preference
     const initializeTheme = () => {
-      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' | null;
+      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'synthwave' | 'system' | null;
       const initialTheme = savedTheme || 'system';
 
       setTheme(initialTheme);
@@ -323,7 +329,7 @@ export default function App() {
         'Network error for /v1/applications',
         'NetworkVisualization',
         'fetching topology',
-        'Unable to connect to Extreme Platform ONE',
+        'Unable to connect to the controller',
         '/v1/system/time',
         '/v1/system/info',
         '/v1/system/logging',
@@ -408,7 +414,7 @@ export default function App() {
           '/v1/sites', 'Network error for /v1/sites',
           '/v1/applications', 'Network error for /v1/applications',
           'NetworkVisualization', 'fetching topology',
-          'Unable to connect to Extreme Platform ONE',
+          'Unable to connect to the controller',
           '6000ms', '30000ms', '15000ms',
           '/v1/system/time', '/v1/system/info', '/v1/system/logging', '/v1/system/maintenance',
           '/v3/topologies', 'Network error for /v3/topologies',
@@ -466,7 +472,7 @@ export default function App() {
           
           console.warn('Request timeout detected:', errorMessage);
           toast.error('Request timed out', {
-            description: 'The Extreme Platform ONE took too long to respond.',
+            description: 'The controller took too long to respond.',
             duration: 4000
           });
           event.preventDefault();
@@ -542,7 +548,7 @@ export default function App() {
         '/v1/sites', 'Network error for /v1/sites',
         '/v1/applications', 'Network error for /v1/applications',
         'NetworkVisualization', 'fetching topology',
-        'Unable to connect to Extreme Platform ONE',
+        'Unable to connect to the controller',
         '/v1/system/time', '/v1/system/info', '/v1/system/logging', '/v1/system/maintenance',
         '/v3/topologies', 'Network error for /v3/topologies',
         '/v3/cos', 'Network error for /v3/cos',
@@ -554,11 +560,11 @@ export default function App() {
         'Error loading filter options', 'Error loading access points',
         'timeout', 'timed out', '15000ms', '30000ms'
       ];
-      
+
       if (suppressedPatterns.some(pattern => errorString.includes(pattern))) {
         return; // Silently suppress
       }
-      
+
       // Call original console.error for legitimate errors
       originalConsoleError.apply(console, args);
     };
@@ -585,7 +591,7 @@ export default function App() {
         '/v1/sites', 'Network error for /v1/sites',
         '/v1/applications', 'Network error for /v1/applications',
         'NetworkVisualization', 'fetching topology',
-        'Unable to connect to Extreme Platform ONE',
+        'Unable to connect to the controller',
         '/v1/system/time', '/v1/system/info', '/v1/system/logging', '/v1/system/maintenance',
         '/v3/topologies', 'Network error for /v3/topologies',
         '/v3/cos', 'Network error for /v3/cos',
@@ -625,29 +631,40 @@ export default function App() {
     };
   }, []);
 
+  // All special themes that layer on top of dark mode
+  const DARK_OVERLAY_THEMES = ['synthwave', 'pirate', 'mi5'] as const;
+
   // Helper function to apply theme to document
-  const applyTheme = (newTheme: 'light' | 'dark') => {
+  const applyTheme = (newTheme: string) => {
     const root = document.documentElement;
 
-    // Apply color variables from themes.ts
-    applyThemeColors(newTheme === 'light' ? 'default' : newTheme);
+    // All overlay themes use dark as their base
+    const isDarkOverlay = DARK_OVERLAY_THEMES.includes(newTheme as any);
+    applyThemeColors(newTheme === 'light' ? 'default' : 'dark');
 
     // Remove existing theme classes
-    root.classList.remove('light', 'dark');
+    root.classList.remove('light', 'dark', 'synthwave', 'pirate', 'mi5');
 
-    // Add new theme class
-    root.classList.add(newTheme);
+    if (isDarkOverlay) {
+      root.classList.add('dark', newTheme);
+    } else {
+      root.classList.add(newTheme);
+    }
 
     // Set data attribute for theme as well (for compatibility)
     root.setAttribute('data-theme', newTheme);
 
     // Ensure body also gets the theme class
-    document.body.classList.remove('light', 'dark');
-    document.body.classList.add(newTheme);
+    document.body.classList.remove('light', 'dark', 'synthwave', 'pirate', 'mi5');
+    if (isDarkOverlay) {
+      document.body.classList.add('dark', newTheme);
+    } else {
+      document.body.classList.add(newTheme);
+    }
   };
 
   // Helper function to apply theme based on mode (handles system detection)
-  const applyThemeForMode = (mode: 'light' | 'dark' | 'system') => {
+  const applyThemeForMode = (mode: 'light' | 'dark' | 'synthwave' | 'system') => {
     if (mode === 'system') {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       applyTheme(systemTheme);
@@ -659,10 +676,16 @@ export default function App() {
   const toggleTheme = () => {
     const newTheme =
       theme === 'light' ? 'dark' :
-      theme === 'dark' ? 'system' :
+      theme === 'dark' ? 'synthwave' :
+      theme === 'synthwave' ? 'system' :
       'light';
     setTheme(newTheme);
     applyThemeForMode(newTheme);
+
+    // Reset music player when switching to synthwave
+    if (newTheme === 'synthwave') {
+      setIsMusicPlayerDismissed(false);
+    }
 
     // Save to localStorage
     localStorage.setItem('theme', newTheme);
@@ -670,10 +693,12 @@ export default function App() {
     // Show a toast notification
     const themeLabel =
       newTheme === 'system' ? 'System (Auto)' :
+      newTheme === 'synthwave' ? 'Miami Vice' :
       newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
 
     const themeDescription =
       newTheme === 'system' ? 'The interface will now follow your system preference.' :
+      newTheme === 'synthwave' ? 'Welcome to Miami. Neon lights activated.' :
       `The interface is now using ${newTheme} theme.`;
 
     toast.success(`Switched to ${themeLabel} mode`, {
@@ -808,7 +833,7 @@ export default function App() {
         toast.error('Connection test failed', {
           description: errorMessage.includes('timed out') 
             ? 'Connection test timed out - server may be slow or unreachable'
-            : 'Unable to reach Extreme Platform ONE API'
+            : 'Unable to reach the controller API'
         });
       }
     } finally {
@@ -848,6 +873,8 @@ export default function App() {
         return <Workspace api={apiService} />;
       case 'service-levels':
         return <DashboardEnhanced />;
+      case 'sle-dashboard':
+        return <SLEDashboard onClientClick={handleShowClientDetail} />;
       case 'app-insights':
         return <AppInsights api={apiService} />;
       case 'access-points':
@@ -913,6 +940,8 @@ export default function App() {
         return <ConfigureAdoptionRules />;
       case 'configure-guest':
         return <ConfigureGuest />;
+      case 'configure-advanced':
+        return <ConfigureAdvanced />;
       case 'configure-sites':
         return <ConfigureSites onShowDetail={handleShowSiteDetail} />;
       case 'tools':
@@ -1012,7 +1041,22 @@ export default function App() {
 
   return (
     <>
-      <div className="h-screen flex bg-background">
+      {/* Miami Vice sunset background - fixed behind everything */}
+      {theme === 'synthwave' && (
+        <div
+          className="fixed inset-0 w-screen h-screen"
+          style={{
+            zIndex: 0,
+            pointerEvents: 'none',
+            background: [
+              "url('/synthwave-silhouette.svg') center bottom / cover no-repeat fixed",
+              "radial-gradient(ellipse 30% 28% at 50% 50%, rgba(255,213,79,0.85) 0%, rgba(255,171,64,0.65) 25%, rgba(255,109,0,0.35) 50%, rgba(255,61,0,0.15) 70%, transparent 100%)",
+              "linear-gradient(to bottom, #0a0520 0%, #150a35 10%, #2d1260 20%, #5c1a8e 30%, #8e1580 37%, #c91880 43%, #e83068 47%, #ff5040 51%, #ff7830 55%, #ff5040 59%, #c91880 65%, #5c1a8e 75%, #2d1260 85%, #150a35 92%, #0a0520 100%)"
+            ].join(', ')
+          }}
+        />
+      )}
+      <div className={`h-screen flex ${theme === 'synthwave' ? '' : 'bg-background'}`} style={{ position: 'relative', zIndex: 1 }}>
         <Sidebar
           onLogout={handleLogout}
           adminRole={adminRole}
@@ -1137,6 +1181,16 @@ export default function App() {
           onHeightChange={setDevPanelHeight}
         />
       )}
+      {/* Synthwave Music Player - Shows when Miami Vice theme is active */}
+      {theme === 'synthwave' && !isMusicPlayerDismissed && (
+        <Suspense fallback={null}>
+          <SynthwaveMusicPlayer
+            isVisible={true}
+            onClose={() => setIsMusicPlayerDismissed(true)}
+          />
+        </Suspense>
+      )}
+
       {/* Version Display - Fixed to bottom-left */}
       <VersionDisplay position="bottom-left" />
     </>
