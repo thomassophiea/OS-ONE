@@ -5,19 +5,16 @@
  */
 
 const REQUIRED = [
-  'XIQ_USERNAME',
-  'XIQ_PASSWORD',
   'INLETS_CONTROLLER_BASE_URL',
 ];
 
 const OPTIONAL = [
   'XIQ_BASE_URL',             // defaults to 'https://cal-api.extremecloudiq.com'
   'XIQ_API_VERSION',          // defaults to 'v2'
-  'CONTROLLER_CLIENT_ID',
-  'CONTROLLER_CLIENT_SECRET',
-  'CONTROLLER_USERNAME',      // only needed if not using XIQ SSO for controller
-  'CONTROLLER_PASSWORD',      // only needed if not using XIQ SSO for controller
-  'API_GATEWAY_BASE_URL',
+  'XIQ_USERNAME',             // server-side XIQ token (health checks only)
+  'XIQ_PASSWORD',             // server-side XIQ token (health checks only)
+  'CONTROLLER_USERNAME',      // password-grant fallback for controller token
+  'CONTROLLER_PASSWORD',      // password-grant fallback for controller token
   'LOG_LEVEL',                // defaults to 'info'
 ];
 
