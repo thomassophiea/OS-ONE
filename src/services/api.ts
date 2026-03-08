@@ -27,11 +27,9 @@ logger.log('[API Service] BASE_URL:', BASE_URL);
 
 // Function to get current base URL (supports dynamic controller switching)
 function getBaseUrl(): string {
-  // In production, always use the proxy - the X-Controller-URL header handles routing
-  if (isProduction) {
-    return BASE_URL; // Always /api/management in production
-  }
-  // In development, use dynamic controller URL if set
+  // When a per-customer controller URL is known, call it directly from the browser.
+  // The Inlets nginx blocks server-to-server requests (Railway → Inlets = 403) but
+  // allows browser requests, so bypassing the Railway proxy is required.
   if (DYNAMIC_CONTROLLER_URL) {
     return `${DYNAMIC_CONTROLLER_URL}/management`;
   }
@@ -369,7 +367,11 @@ class ApiService {
     // Cancel all pending requests first
     this.cancelAllRequests();
     
-    if (this.accessToken) {
+    // Only revoke controller-local tokens (3 JWT segments, short).
+    // XIQ JWTs are very long and expire on their own — revoking them against
+    // the controller endpoint fails and causes a noisy 500 error.
+    const isControllerToken = this.accessToken && this.accessToken.length < 500;
+    if (isControllerToken) {
       try {
         await fetch(`${getBaseUrl()}/v1/oauth2/token/${this.accessToken}`, {
           method: 'DELETE',
@@ -411,10 +413,6 @@ class ApiService {
       ...(options.headers as Record<string, string>),
     };
     
-    // Add dynamic controller URL header for multi-controller proxy routing
-    if (DYNAMIC_CONTROLLER_URL && isProduction) {
-      headers['X-Controller-URL'] = DYNAMIC_CONTROLLER_URL;
-    }
 
     // Create AbortController for timeout and cancellation
     const controller = new AbortController();
