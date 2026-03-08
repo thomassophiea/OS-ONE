@@ -16,48 +16,27 @@ const PREFIX = 'AuthRoutes';
 const router = express.Router();
 
 /**
- * Discover the Campus Controller Inlets URL for a given XIQ account.
- * Calls XIQ's virtual-controllers API using the user's own token.
+ * Derive the Campus Controller Inlets URL from the XIQ JWT payload.
  *
- * @param {string} xiqToken   Valid XIQ access_token
- * @param {string} xiqBaseUrl e.g. 'https://cal-api.extremecloudiq.com'
- * @returns {Promise<string>} Controller base URL, e.g. 'https://calr1-inlets.extremecloudiq.com:5825'
+ * XIQ access tokens contain a `data_center` claim (e.g. "CALR1", "US1", "EU1").
+ * The corresponding Inlets tunnel follows the pattern:
+ *   https://{data_center.toLowerCase()}-inlets.extremecloudiq.com:5825
+ *
+ * @param {string} xiqToken  XIQ access_token (JWT)
+ * @returns {string} Controller base URL
  */
-async function discoverControllerUrl(xiqToken, xiqBaseUrl) {
-  const url = `${xiqBaseUrl}/xapi/v2/administration/virtualControllers`;
-  logger.info(PREFIX, `Discovering controller URL from ${url}`);
+function controllerUrlFromToken(xiqToken) {
+  // JWT payload is the second base64url-encoded segment
+  const parts = xiqToken.split('.');
+  if (parts.length < 2) throw new Error('xiqToken is not a valid JWT');
 
-  const res = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${xiqToken}`, 'Accept': 'application/json' },
-  });
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  logger.info(PREFIX, `XIQ JWT claims: data_center=${payload.data_center} customer_id=${payload.customer_id}`);
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} from ${url}: ${text}`);
-  }
+  const dc = payload.data_center;
+  if (!dc) throw new Error(`XIQ JWT missing data_center claim: ${JSON.stringify(payload)}`);
 
-  const data = await res.json();
-  logger.info(PREFIX, `XIQ virtualControllers response: ${JSON.stringify(data)}`);
-
-  // XIQ may wrap results in .data or return an array directly
-  const controllers = Array.isArray(data) ? data : (data.data || data.virtualControllers || []);
-  if (controllers.length === 0) {
-    throw new Error('XIQ returned no virtual controllers for this account');
-  }
-
-  // Prefer a connected controller; fall back to the first entry
-  const entry = controllers.find(c => c.status === 'CONNECTED' || c.connection_status === 'CONNECTED')
-    || controllers[0];
-
-  // Try multiple field names that XIQ might use for the management/tunnel URL
-  const controllerUrl = entry.management_url || entry.mgmt_url || entry.tunnel_url
-    || entry.portal_url || entry.sso_url || entry.url || entry.access_url;
-
-  if (!controllerUrl) {
-    throw new Error(`Could not find controller URL in entry: ${JSON.stringify(entry)}`);
-  }
-
-  return controllerUrl.replace(/\/$/, '');
+  return `https://${dc.toLowerCase()}-inlets.extremecloudiq.com:5825`;
 }
 
 const REGION_URLS = {
@@ -107,12 +86,12 @@ router.post('/xiq-login', async (req, res) => {
 
     logger.info(PREFIX, `XIQ login successful for ${username}`);
 
-    // Discover this customer's Campus Controller URL via XIQ, then exchange token
+    // Derive controller URL from JWT data_center claim, then exchange token
     let controllerToken = null;
     let controllerUrl = null;
     try {
-      controllerUrl = await discoverControllerUrl(json.access_token, baseUrl);
-      logger.info(PREFIX, `Discovered controller URL: ${controllerUrl}`);
+      controllerUrl = controllerUrlFromToken(json.access_token);
+      logger.info(PREFIX, `Derived controller URL from JWT: ${controllerUrl}`);
       controllerToken = await exchangeXiqToken(json.access_token, controllerUrl);
       logger.info(PREFIX, 'Controller token obtained via XIQ token exchange');
     } catch (err) {
