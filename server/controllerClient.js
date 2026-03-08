@@ -32,7 +32,16 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: false });
  * @param {object} [query]    Optional query params
  * @returns {Promise<{status: number, data: any}>}
  */
-async function controllerRequest(method, path, body = null, query = {}) {
+/**
+ * @param {string} method
+ * @param {string} path
+ * @param {object} [body]
+ * @param {object} [query]
+ * @param {string|null} [xiqToken]  XIQ Bearer token forwarded from the browser.
+ *                                   When provided the controller's XIQ SSO is used
+ *                                   and no password-grant fetch is needed.
+ */
+async function controllerRequest(method, path, body = null, query = {}, xiqToken = null) {
   if (!config.inlets.baseUrl) {
     throw new Error('INLETS_CONTROLLER_BASE_URL is not configured');
   }
@@ -44,13 +53,14 @@ async function controllerRequest(method, path, body = null, query = {}) {
   const url = `${config.inlets.baseUrl}${path}${qs}`;
   logger.info(PREFIX, `${method} ${url}`);
 
-  const result = await _doRequest(method, url, body);
+  const result = await _doRequest(method, url, body, xiqToken);
 
-  // 401 → invalidate and retry once
-  if (result.status === 401) {
+  // 401 → if we used a service-account token, invalidate and retry once
+  // (if we used an XIQ token, don't retry — the token itself is bad)
+  if (result.status === 401 && !xiqToken) {
     logger.warn(PREFIX, `401 on ${path} — invalidating token and retrying`);
     invalidateToken();
-    return _doRequest(method, url, body);
+    return _doRequest(method, url, body, null);
   }
 
   logger.info(PREFIX, `${method} ${path} → ${result.status}`);
@@ -78,8 +88,9 @@ async function controllerHealthCheck() {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-async function _doRequest(method, url, body) {
-  const token = await getToken();
+async function _doRequest(method, url, body, xiqToken = null) {
+  // Prefer the browser-forwarded XIQ token (SSO); fall back to service account
+  const token = xiqToken || await getToken();
 
   const headers = {
     'Authorization': `Bearer ${token}`,

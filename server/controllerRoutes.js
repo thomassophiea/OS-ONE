@@ -32,7 +32,10 @@ router.all('*', async (req, res) => {
     const body = ['GET', 'HEAD', 'DELETE'].includes(method) ? null : req.body;
     const query = req.query;
 
-    const { status, data } = await controllerRequest(method, controllerPath, body, query);
+    // Forward XIQ Bearer token from browser — controller accepts it via XIQ SSO
+    const xiqToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || null;
+
+    const { status, data } = await controllerRequest(method, controllerPath, body, query, xiqToken);
 
     res.status(status).json(data);
   } catch (err) {

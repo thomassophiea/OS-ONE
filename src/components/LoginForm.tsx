@@ -48,16 +48,11 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
         return;
       }
 
-      // Store XIQ token for cloud API calls
+      // XIQ token works for everything: XIQ API calls + Campus Controller (XIQ SSO)
+      localStorage.setItem('access_token', json.xiq_access_token);
       localStorage.setItem('xiq_access_token', json.xiq_access_token);
       localStorage.setItem('xiq_region', region);
       localStorage.setItem('user_email', username);
-
-      // Store controller token as access_token — this is what api.ts uses for
-      // all /api/management/* calls. Fall back to XIQ token if unavailable
-      // (controller creds not configured), so the app still loads.
-      const controllerToken = json.controller_token || json.xiq_access_token;
-      localStorage.setItem('access_token', controllerToken);
 
       onLoginSuccess();
     } catch {

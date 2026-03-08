@@ -15,8 +15,8 @@ const OPTIONAL = [
   'XIQ_API_VERSION',          // defaults to 'v2'
   'CONTROLLER_CLIENT_ID',
   'CONTROLLER_CLIENT_SECRET',
-  'CONTROLLER_USERNAME',
-  'CONTROLLER_PASSWORD',
+  'CONTROLLER_USERNAME',      // only needed if not using XIQ SSO for controller
+  'CONTROLLER_PASSWORD',      // only needed if not using XIQ SSO for controller
   'API_GATEWAY_BASE_URL',
   'LOG_LEVEL',                // defaults to 'info'
 ];
