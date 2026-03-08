@@ -50,42 +50,94 @@ function invalidateToken() {
  * @param {string} xiqToken  Valid XIQ access_token from /login
  * @returns {Promise<string>} Controller access_token
  */
+/**
+ * Raw HTTP POST — captures body on any status code (unlike fetchJson which throws on 4xx).
+ */
+async function _rawPost(url, body, contentType) {
+  if (typeof globalThis.fetch === 'function') {
+    const res = await globalThis.fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': contentType, 'Accept': 'application/json' },
+      body,
+    });
+    const text = await res.text().catch(() => '');
+    let json;
+    try { json = JSON.parse(text); } catch { json = { _raw: text }; }
+    return { status: res.status, json };
+  }
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = require('https').request({
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname,
+      method: 'POST',
+      headers: { 'Content-Type': contentType, 'Accept': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      rejectUnauthorized: false,
+    }, res => {
+      let data = '';
+      res.on('data', c => { data += c; });
+      res.on('end', () => {
+        let json;
+        try { json = JSON.parse(data); } catch { json = { _raw: data }; }
+        resolve({ status: res.statusCode, json });
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 async function exchangeXiqToken(xiqToken, controllerBaseUrl) {
   const baseUrl = controllerBaseUrl || config.inlets.baseUrl;
   if (!baseUrl) throw new Error('No controller URL provided and INLETS_CONTROLLER_BASE_URL is not configured');
 
   const tokenUrl = `${baseUrl}/management/v1/oauth2/token`;
-  logger.info(PREFIX, `Exchanging XIQ token for controller token at ${tokenUrl}`);
 
-  // RFC 7523 JWT Bearer Token Grant — standard for SSO token exchange
-  const body = JSON.stringify({
-    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-    assertion: xiqToken,
-  });
+  // Try 1: RFC 7523 JWT Bearer Grant (form-encoded — OAuth2 spec uses form encoding)
+  logger.info(PREFIX, `Trying RFC 7523 form-encoded exchange at ${tokenUrl}`);
+  const formBody = `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${encodeURIComponent(xiqToken)}`;
+  let result = await _rawPost(tokenUrl, formBody, 'application/x-www-form-urlencoded');
+  logger.info(PREFIX, `RFC 7523 form response: ${result.status} ${JSON.stringify(result.json)}`);
 
-  const response = await fetchJson(tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Content-Length': Buffer.byteLength(body),
-    },
-    body,
-    agent: httpsAgent,
-  });
-
-  if (!response.access_token) {
-    throw new Error(`Token exchange failed: ${JSON.stringify(response)}`);
+  if (result.status === 200 && result.json.access_token) {
+    const expiresIn = (result.json.expires_in || 3600) - 60;
+    _cachedToken = { accessToken: result.json.access_token, expiresAt: Date.now() + expiresIn * 1000 };
+    logger.info(PREFIX, `Controller token via RFC 7523 form, expires in ${expiresIn}s`);
+    return _cachedToken.accessToken;
   }
 
-  const expiresIn = (response.expires_in || 3600) - 60;
-  _cachedToken = {
-    accessToken: response.access_token,
-    expiresAt: Date.now() + expiresIn * 1000,
-  };
+  // Try 2: RFC 7523 JSON body (some controllers prefer JSON)
+  logger.info(PREFIX, `Trying RFC 7523 JSON exchange at ${tokenUrl}`);
+  const jsonBody = JSON.stringify({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: xiqToken });
+  result = await _rawPost(tokenUrl, jsonBody, 'application/json');
+  logger.info(PREFIX, `RFC 7523 JSON response: ${result.status} ${JSON.stringify(result.json)}`);
 
-  logger.info(PREFIX, `Controller token obtained via XIQ exchange, expires in ${expiresIn}s`);
-  return _cachedToken.accessToken;
+  if (result.status === 200 && result.json.access_token) {
+    const expiresIn = (result.json.expires_in || 3600) - 60;
+    _cachedToken = { accessToken: result.json.access_token, expiresAt: Date.now() + expiresIn * 1000 };
+    logger.info(PREFIX, `Controller token via RFC 7523 JSON, expires in ${expiresIn}s`);
+    return _cachedToken.accessToken;
+  }
+
+  // Try 3: Password grant using CONTROLLER_USERNAME / CONTROLLER_PASSWORD env vars
+  const { username, password } = config.inlets;
+  if (username && password) {
+    logger.info(PREFIX, `Trying password grant for ${username} at ${tokenUrl}`);
+    const pwBody = JSON.stringify({ grant_type: 'password', username, password });
+    result = await _rawPost(tokenUrl, pwBody, 'application/json');
+    logger.info(PREFIX, `Password grant response: ${result.status} ${JSON.stringify(result.json)}`);
+
+    if (result.status === 200 && result.json.access_token) {
+      const expiresIn = (result.json.expires_in || 3600) - 60;
+      _cachedToken = { accessToken: result.json.access_token, expiresAt: Date.now() + expiresIn * 1000 };
+      logger.info(PREFIX, `Controller token via password grant, expires in ${expiresIn}s`);
+      return _cachedToken.accessToken;
+    }
+  }
+
+  throw new Error(`All token exchange methods failed. Last response: ${result.status} ${JSON.stringify(result.json)}`);
 }
 
 async function _fetchToken() {
