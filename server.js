@@ -5,6 +5,14 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// ── XIQ + Inlets integration ──────────────────────────────────────────────────
+import cloudRouter from './server/cloudRoutes.js';
+import controllerRouter from './server/controllerRoutes.js';
+import { xiqHealthCheck } from './server/xiqClient.js';
+import { controllerHealthCheck } from './server/controllerClient.js';
+// Config validation runs on import (logs warnings for missing vars)
+import './server/config.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -76,9 +84,27 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Controller-URL']
 }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check endpoint — includes XIQ + Inlets connectivity status
+app.get('/health', async (req, res) => {
+  const base = { status: 'ok', timestamp: new Date().toISOString() };
+
+  // Fast path: skip upstream probes unless ?deep=true
+  if (req.query.deep !== 'true') {
+    return res.json(base);
+  }
+
+  const [xiq, controller] = await Promise.allSettled([
+    xiqHealthCheck(),
+    controllerHealthCheck(),
+  ]);
+
+  res.json({
+    ...base,
+    integrations: {
+      xiq: xiq.status === 'fulfilled' ? xiq.value : { reachable: false, error: xiq.reason?.message },
+      controller: controller.status === 'fulfilled' ? controller.value : { reachable: false, error: controller.reason?.message },
+    },
+  });
 });
 
 // Version check endpoint - proves which commit is deployed
@@ -1057,6 +1083,14 @@ const proxyOptions = {
     });
   }
 };
+
+// ── XIQ Cloud routes: /cloud/* → ExtremeCloud IQ API ─────────────────────────
+// Handles: cloud inventory, devices, SSIDs, cloud services
+app.use('/cloud', express.json(), cloudRouter);
+
+// ── Inlets Controller routes: /controller/* → Campus Controller via Inlets ───
+// Handles: controller config, RF profiles, WLANs, runtime state
+app.use('/controller', express.json(), controllerRouter);
 
 // Proxy all /api/* requests to Campus Controller (with dynamic routing support)
 console.log('[Proxy Server] Setting up /api/* proxy middleware with dynamic routing');
