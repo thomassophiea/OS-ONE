@@ -50,9 +50,9 @@ function invalidateToken() {
  * @param {string} xiqToken  Valid XIQ access_token from /login
  * @returns {Promise<string>} Controller access_token
  */
-async function exchangeXiqToken(xiqToken) {
-  const { baseUrl } = config.inlets;
-  if (!baseUrl) throw new Error('INLETS_CONTROLLER_BASE_URL is not configured');
+async function exchangeXiqToken(xiqToken, controllerBaseUrl) {
+  const baseUrl = controllerBaseUrl || config.inlets.baseUrl;
+  if (!baseUrl) throw new Error('No controller URL provided and INLETS_CONTROLLER_BASE_URL is not configured');
 
   const tokenUrl = `${baseUrl}/management/v1/oauth2/token`;
   logger.info(PREFIX, `Exchanging XIQ token for controller token at ${tokenUrl}`);

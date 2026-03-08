@@ -15,6 +15,51 @@ import { exchangeXiqToken } from './tokenService.js';
 const PREFIX = 'AuthRoutes';
 const router = express.Router();
 
+/**
+ * Discover the Campus Controller Inlets URL for a given XIQ account.
+ * Calls XIQ's virtual-controllers API using the user's own token.
+ *
+ * @param {string} xiqToken   Valid XIQ access_token
+ * @param {string} xiqBaseUrl e.g. 'https://cal-api.extremecloudiq.com'
+ * @returns {Promise<string>} Controller base URL, e.g. 'https://calr1-inlets.extremecloudiq.com:5825'
+ */
+async function discoverControllerUrl(xiqToken, xiqBaseUrl) {
+  const url = `${xiqBaseUrl}/xapi/v2/administration/virtualControllers`;
+  logger.info(PREFIX, `Discovering controller URL from ${url}`);
+
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${xiqToken}`, 'Accept': 'application/json' },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status} from ${url}: ${text}`);
+  }
+
+  const data = await res.json();
+  logger.info(PREFIX, `XIQ virtualControllers response: ${JSON.stringify(data)}`);
+
+  // XIQ may wrap results in .data or return an array directly
+  const controllers = Array.isArray(data) ? data : (data.data || data.virtualControllers || []);
+  if (controllers.length === 0) {
+    throw new Error('XIQ returned no virtual controllers for this account');
+  }
+
+  // Prefer a connected controller; fall back to the first entry
+  const entry = controllers.find(c => c.status === 'CONNECTED' || c.connection_status === 'CONNECTED')
+    || controllers[0];
+
+  // Try multiple field names that XIQ might use for the management/tunnel URL
+  const controllerUrl = entry.management_url || entry.mgmt_url || entry.tunnel_url
+    || entry.portal_url || entry.sso_url || entry.url || entry.access_url;
+
+  if (!controllerUrl) {
+    throw new Error(`Could not find controller URL in entry: ${JSON.stringify(entry)}`);
+  }
+
+  return controllerUrl.replace(/\/$/, '');
+}
+
 const REGION_URLS = {
   'Global':     'https://api.extremecloudiq.com',
   'EU':         'https://api-eu.extremecloudiq.com',
@@ -62,19 +107,23 @@ router.post('/xiq-login', async (req, res) => {
 
     logger.info(PREFIX, `XIQ login successful for ${username}`);
 
-    // Exchange XIQ token for a Campus Controller token (RFC 7523 JWT Bearer Grant)
+    // Discover this customer's Campus Controller URL via XIQ, then exchange token
     let controllerToken = null;
+    let controllerUrl = null;
     try {
-      controllerToken = await exchangeXiqToken(json.access_token);
+      controllerUrl = await discoverControllerUrl(json.access_token, baseUrl);
+      logger.info(PREFIX, `Discovered controller URL: ${controllerUrl}`);
+      controllerToken = await exchangeXiqToken(json.access_token, controllerUrl);
       logger.info(PREFIX, 'Controller token obtained via XIQ token exchange');
     } catch (err) {
-      logger.warn(PREFIX, `Controller token exchange failed (will use XIQ token as fallback): ${err.message}`);
+      logger.warn(PREFIX, `Controller setup failed (will use XIQ token as fallback): ${err.message}`);
     }
 
     res.json({
       xiq_access_token: json.access_token,
       xiq_token_type: json.token_type || 'Bearer',
       controller_token: controllerToken,
+      controller_url: controllerUrl,
     });
   } catch (err) {
     logger.error(PREFIX, `XIQ login error: ${err.message}`);

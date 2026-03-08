@@ -100,6 +100,12 @@ class ApiService {
     // Load tokens from localStorage on initialization
     this.accessToken = localStorage.getItem('access_token');
     this.refreshToken = localStorage.getItem('refresh_token');
+    // Restore per-customer controller URL so X-Controller-URL header is sent immediately
+    const savedControllerUrl = localStorage.getItem('controller_url');
+    if (savedControllerUrl) {
+      DYNAMIC_CONTROLLER_URL = savedControllerUrl;
+      logger.log('[API Service] Restored controller URL from localStorage:', savedControllerUrl);
+    }
   }
 
   /**
@@ -108,6 +114,11 @@ class ApiService {
    */
   setBaseUrl(url: string | null) {
     DYNAMIC_CONTROLLER_URL = url;
+    if (url) {
+      localStorage.setItem('controller_url', url);
+    } else {
+      localStorage.removeItem('controller_url');
+    }
     logger.log('[API Service] Dynamic controller URL set to:', url || 'default');
   }
 
@@ -379,6 +390,9 @@ class ApiService {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('admin_role');
     localStorage.removeItem('user_email');
+    localStorage.removeItem('controller_url');
+    localStorage.removeItem('xiq_access_token');
+    DYNAMIC_CONTROLLER_URL = null;
   }
 
   async makeAuthenticatedRequest(

@@ -52,6 +52,9 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
       // access_token is what the /api/* proxy uses for the controller
       localStorage.setItem('access_token', json.controller_token || json.xiq_access_token);
       localStorage.setItem('xiq_access_token', json.xiq_access_token);
+      if (json.controller_url) {
+        localStorage.setItem('controller_url', json.controller_url);
+      }
       localStorage.setItem('xiq_region', region);
       localStorage.setItem('user_email', username);
 
