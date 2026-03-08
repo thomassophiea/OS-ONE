@@ -13,6 +13,7 @@
 import https from 'https';
 import { config } from './config.js';
 import { logger } from './redactLogger.js';
+import { getXiqToken, invalidateXiqToken } from './xiqTokenService.js';
 
 const PREFIX = 'XIQClient';
 
@@ -29,20 +30,31 @@ const httpsAgent = new https.Agent({ rejectUnauthorized: true });
  * @returns {Promise<{status: number, data: any}>}
  */
 async function xiqRequest(method, path, body = null, query = {}) {
-  if (!config.xiq.bearerToken) {
-    throw new Error('XIQ_BEARER_TOKEN is not configured — cannot reach ExtremeCloud IQ');
-  }
-
   const qs = Object.keys(query).length
     ? '?' + new URLSearchParams(query).toString()
     : '';
 
-  // XIQ API base: https://calr1.extremecloudiq.com/xapi/v2
   const url = `${config.xiq.baseUrl}/xapi/${config.xiq.apiVersion}${path}${qs}`;
   logger.info(PREFIX, `${method} ${url}`);
 
+  const result = await _doRequest(method, url, body);
+
+  // 401 → invalidate token and retry once
+  if (result.status === 401) {
+    logger.warn(PREFIX, `401 on ${path} — invalidating token and retrying`);
+    invalidateXiqToken();
+    return _doRequest(method, url, body);
+  }
+
+  logger.info(PREFIX, `${method} ${path} → ${result.status}`);
+  return result;
+}
+
+async function _doRequest(method, url, body) {
+  const token = await getXiqToken();
+
   const headers = {
-    'Authorization': `Bearer ${config.xiq.bearerToken}`,
+    'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   };
@@ -50,9 +62,7 @@ async function xiqRequest(method, path, body = null, query = {}) {
   const fetchBody = body ? JSON.stringify(body) : undefined;
   if (fetchBody) headers['Content-Length'] = Buffer.byteLength(fetchBody);
 
-  const result = await _fetch(url, method, headers, fetchBody);
-  logger.info(PREFIX, `${method} ${path} → ${result.status}`);
-  return result;
+  return _fetch(url, method, headers, fetchBody);
 }
 
 /**

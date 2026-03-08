@@ -15,7 +15,8 @@ describe('redact()', () => {
 
   beforeEach(async () => {
     // Isolate env
-    vi.stubEnv('XIQ_BEARER_TOKEN', 'super-secret-token-abc123');
+    vi.stubEnv('XIQ_USERNAME', 'user@example.com');
+    vi.stubEnv('XIQ_PASSWORD', 'super-secret-token-abc123');
     vi.stubEnv('CONTROLLER_PASSWORD', 'P@ssword1');
     vi.stubEnv('LOG_LEVEL', 'error'); // suppress output during tests
     ({ redact } = await import('../redactLogger.js?t=' + Date.now()));
@@ -95,8 +96,9 @@ describe('tokenService', () => {
 
 describe('config', () => {
   beforeEach(() => {
-    vi.stubEnv('XIQ_BASE_URL', 'https://calr1.extremecloudiq.com');
-    vi.stubEnv('XIQ_BEARER_TOKEN', 'tok');
+    vi.stubEnv('XIQ_BASE_URL', 'https://cal-api.extremecloudiq.com');
+    vi.stubEnv('XIQ_USERNAME', 'user@example.com');
+    vi.stubEnv('XIQ_PASSWORD', 'tok');
     vi.stubEnv('INLETS_CONTROLLER_BASE_URL', 'https://calr1-inlets.extremecloudiq.com:5825');
     vi.stubEnv('LOG_LEVEL', 'error');
     vi.resetModules();
@@ -109,16 +111,17 @@ describe('config', () => {
 
   it('reads XIQ config from env vars', async () => {
     const { config } = await import('../config.js?t=' + Date.now());
-    expect(config.xiq.baseUrl).toBe('https://calr1.extremecloudiq.com');
-    expect(config.xiq.bearerToken).toBe('tok');
+    expect(config.xiq.baseUrl).toBe('https://cal-api.extremecloudiq.com');
+    expect(config.xiq.username).toBe('user@example.com');
+    expect(config.xiq.password).toBe('tok');
     expect(config.xiq.apiVersion).toBe('v2');
   });
 
   it('strips trailing slash from baseUrl', async () => {
-    vi.stubEnv('XIQ_BASE_URL', 'https://calr1.extremecloudiq.com/');
+    vi.stubEnv('XIQ_BASE_URL', 'https://cal-api.extremecloudiq.com/');
     vi.resetModules();
     const { config } = await import('../config.js?t=' + Date.now());
-    expect(config.xiq.baseUrl).toBe('https://calr1.extremecloudiq.com');
+    expect(config.xiq.baseUrl).toBe('https://cal-api.extremecloudiq.com');
   });
 
   it('reads inlets config from env vars', async () => {

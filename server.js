@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 // ── XIQ + Inlets integration ──────────────────────────────────────────────────
 import cloudRouter from './server/cloudRoutes.js';
 import controllerRouter from './server/controllerRoutes.js';
+import authRouter from './server/authRoutes.js';
 import { xiqHealthCheck } from './server/xiqClient.js';
 import { controllerHealthCheck } from './server/controllerClient.js';
 // Config validation runs on import (logs warnings for missing vars)
@@ -1083,6 +1084,9 @@ const proxyOptions = {
     });
   }
 };
+
+// ── Auth routes: /auth/* → XIQ login proxy ───────────────────────────────────
+app.use('/auth', express.json(), authRouter);
 
 // ── XIQ Cloud routes: /cloud/* → ExtremeCloud IQ API ─────────────────────────
 // Handles: cloud inventory, devices, SSIDs, cloud services

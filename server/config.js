@@ -5,12 +5,13 @@
  */
 
 const REQUIRED = [
-  'XIQ_BASE_URL',
-  'XIQ_BEARER_TOKEN',
+  'XIQ_USERNAME',
+  'XIQ_PASSWORD',
   'INLETS_CONTROLLER_BASE_URL',
 ];
 
 const OPTIONAL = [
+  'XIQ_BASE_URL',             // defaults to 'https://cal-api.extremecloudiq.com'
   'XIQ_API_VERSION',          // defaults to 'v2'
   'CONTROLLER_CLIENT_ID',
   'CONTROLLER_CLIENT_SECRET',
@@ -42,9 +43,10 @@ function validateEnv() {
 const config = {
   // ExtremeCloud IQ
   xiq: {
-    baseUrl: (process.env.XIQ_BASE_URL || 'https://calr1.extremecloudiq.com').replace(/\/$/, ''),
+    baseUrl: (process.env.XIQ_BASE_URL || 'https://cal-api.extremecloudiq.com').replace(/\/$/, ''),
     apiVersion: process.env.XIQ_API_VERSION || 'v2',
-    bearerToken: process.env.XIQ_BEARER_TOKEN || '',
+    username: process.env.XIQ_USERNAME || '',
+    password: process.env.XIQ_PASSWORD || '',
   },
 
   // Campus Controller via Inlets tunnel
