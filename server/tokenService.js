@@ -67,7 +67,7 @@ async function _rawPost(url, body, contentType) {
   }
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
-    const req = require('https').request({
+    const req = https.request({
       hostname: parsed.hostname,
       port: parsed.port || 443,
       path: parsed.pathname,
