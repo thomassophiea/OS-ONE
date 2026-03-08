@@ -110,4 +110,75 @@ router.post('/xiq-login', async (req, res) => {
   }
 });
 
+/**
+ * GET /auth/diagnose
+ * Shows exactly what happens during token exchange — call this after login
+ * to see the raw controller response and diagnose auth issues.
+ *
+ * Requires: Authorization: Bearer <xiq_access_token>
+ */
+router.get('/diagnose', async (req, res) => {
+  const xiqToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  if (!xiqToken) {
+    return res.status(400).json({ error: 'Send your XIQ token as Authorization: Bearer <token>' });
+  }
+
+  const result = { xiq_token_prefix: xiqToken.substring(0, 20) + '...' };
+
+  // Step 1: Decode JWT
+  try {
+    const parts = xiqToken.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    result.jwt_claims = {
+      sub: payload.sub,
+      data_center: payload.data_center,
+      customer_id: payload.customer_id,
+      role: payload.role,
+      iss: payload.iss,
+      exp: new Date(payload.exp * 1000).toISOString(),
+    };
+    result.derived_controller_url = `https://${payload.data_center.toLowerCase()}-inlets.extremecloudiq.com:5825`;
+  } catch (e) {
+    result.jwt_decode_error = e.message;
+    return res.json(result);
+  }
+
+  const controllerUrl = result.derived_controller_url;
+  const tokenUrl = `${controllerUrl}/management/v1/oauth2/token`;
+
+  // Step 2: Try RFC 7523 exchange — capture raw response regardless of status
+  try {
+    const body = JSON.stringify({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion: xiqToken,
+    });
+    const raw = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body,
+    });
+    const text = await raw.text().catch(() => '');
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { parsed = text; }
+    result.token_exchange = { status: raw.status, body: parsed };
+  } catch (e) {
+    result.token_exchange = { error: e.message };
+  }
+
+  // Step 3: Try a test GET to the controller with the XIQ token
+  try {
+    const raw = await fetch(`${controllerUrl}/management/v1/administrators`, {
+      headers: { 'Authorization': `Bearer ${xiqToken}`, 'Accept': 'application/json' },
+    });
+    const text = await raw.text().catch(() => '');
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { parsed = text.substring(0, 200); }
+    result.test_request_xiq_token = { status: raw.status, body: parsed };
+  } catch (e) {
+    result.test_request_xiq_token = { error: e.message };
+  }
+
+  res.json(result);
+});
+
 export default router;
