@@ -15,6 +15,9 @@ import { exchangeXiqToken } from './tokenService.js';
 const PREFIX = 'AuthRoutes';
 const router = express.Router();
 
+// Browser-like UA so Inlets nginx doesn't 403 server-side requests
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 /**
  * Derive the Campus Controller Inlets URL from the XIQ JWT payload.
  *
@@ -154,7 +157,7 @@ router.get('/diagnose', async (req, res) => {
     });
     const raw = await fetch(tokenUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': BROWSER_UA },
       body,
     });
     const text = await raw.text().catch(() => '');
@@ -168,7 +171,7 @@ router.get('/diagnose', async (req, res) => {
   // Step 3: Try a test GET to the controller with the XIQ token
   try {
     const raw = await fetch(`${controllerUrl}/management/v1/administrators`, {
-      headers: { 'Authorization': `Bearer ${xiqToken}`, 'Accept': 'application/json' },
+      headers: { 'Authorization': `Bearer ${xiqToken}`, 'Accept': 'application/json', 'User-Agent': BROWSER_UA },
     });
     const text = await raw.text().catch(() => '');
     let parsed;

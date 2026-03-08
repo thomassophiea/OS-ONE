@@ -53,11 +53,14 @@ function invalidateToken() {
 /**
  * Raw HTTP POST — captures body on any status code (unlike fetchJson which throws on 4xx).
  */
+// Browser-like UA so Inlets nginx doesn't 403 server-side requests
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 async function _rawPost(url, body, contentType) {
   if (typeof globalThis.fetch === 'function') {
     const res = await globalThis.fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': contentType, 'Accept': 'application/json' },
+      headers: { 'Content-Type': contentType, 'Accept': 'application/json', 'User-Agent': BROWSER_UA },
       body,
     });
     const text = await res.text().catch(() => '');
@@ -72,7 +75,7 @@ async function _rawPost(url, body, contentType) {
       port: parsed.port || 443,
       path: parsed.pathname,
       method: 'POST',
-      headers: { 'Content-Type': contentType, 'Accept': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      headers: { 'Content-Type': contentType, 'Accept': 'application/json', 'Content-Length': Buffer.byteLength(body), 'User-Agent': BROWSER_UA },
       rejectUnauthorized: false,
     }, res => {
       let data = '';
@@ -161,6 +164,7 @@ async function _fetchToken() {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       'Content-Length': Buffer.byteLength(body),
+      'User-Agent': BROWSER_UA,
     },
     body,
     agent: httpsAgent,

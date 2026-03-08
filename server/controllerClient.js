@@ -23,6 +23,9 @@ const PREFIX = 'ControllerClient';
 // Accept self-signed certs on the Inlets tunnel (same as existing proxy behaviour)
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
+// Browser-like UA so Inlets nginx doesn't 403 server-side requests
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 /**
  * Make an authenticated request to the Campus Controller via the Inlets endpoint.
  *
@@ -96,6 +99,7 @@ async function _doRequest(method, url, body, xiqToken = null) {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'User-Agent': BROWSER_UA,
   };
 
   const fetchBody = body ? JSON.stringify(body) : undefined;
