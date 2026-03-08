@@ -11,6 +11,7 @@ import controllerRouter from './server/controllerRoutes.js';
 import authRouter from './server/authRoutes.js';
 import { xiqHealthCheck } from './server/xiqClient.js';
 import { controllerHealthCheck } from './server/controllerClient.js';
+import { getToken as getControllerToken } from './server/tokenService.js';
 // Config validation runs on import (logs warnings for missing vars)
 import './server/config.js';
 
@@ -1057,11 +1058,13 @@ const proxyOptions = {
     const targetUrl = getControllerUrl(req);
     console.log(`[Proxy] ${req.method} ${req.url} -> ${targetUrl}${req.url}`);
 
-    // Forward original headers
-    if (req.headers.authorization) {
-      proxyReq.setHeader('Authorization', req.headers.authorization);
+    // Inject the campus controller service-account token (pre-fetched by middleware).
+    // This replaces any XIQ token the browser may have sent — the controller only
+    // accepts its own OAuth2 tokens.
+    if (req._controllerToken) {
+      proxyReq.setHeader('Authorization', `Bearer ${req._controllerToken}`);
     }
-    
+
     // Remove the x-controller-url header before forwarding (internal use only)
     proxyReq.removeHeader('x-controller-url');
   },
@@ -1097,10 +1100,16 @@ app.use('/cloud', express.json(), cloudRouter);
 app.use('/controller', express.json(), controllerRouter);
 
 // Proxy all /api/* requests to Campus Controller (with dynamic routing support)
+// Pre-fetch the campus controller token so onProxyReq (which is sync) can inject it.
 console.log('[Proxy Server] Setting up /api/* proxy middleware with dynamic routing');
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
   const target = getControllerUrl(req);
   console.log(`[Proxy Middleware] Received: ${req.method} ${req.url} (target: ${target})`);
+  try {
+    req._controllerToken = await getControllerToken();
+  } catch (err) {
+    console.warn('[Proxy] Could not get controller token — forwarding without auth:', err.message);
+  }
   next();
 }, createProxyMiddleware(proxyOptions));
 
