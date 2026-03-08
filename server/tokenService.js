@@ -43,6 +43,51 @@ function invalidateToken() {
   _cachedToken = null;
 }
 
+/**
+ * Exchange a XIQ access token for a Campus Controller OAuth2 token.
+ * The controller validates the XIQ JWT and issues its own token.
+ *
+ * @param {string} xiqToken  Valid XIQ access_token from /login
+ * @returns {Promise<string>} Controller access_token
+ */
+async function exchangeXiqToken(xiqToken) {
+  const { baseUrl } = config.inlets;
+  if (!baseUrl) throw new Error('INLETS_CONTROLLER_BASE_URL is not configured');
+
+  const tokenUrl = `${baseUrl}/management/v1/oauth2/token`;
+  logger.info(PREFIX, `Exchanging XIQ token for controller token at ${tokenUrl}`);
+
+  // RFC 7523 JWT Bearer Token Grant — standard for SSO token exchange
+  const body = JSON.stringify({
+    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    assertion: xiqToken,
+  });
+
+  const response = await fetchJson(tokenUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+    },
+    body,
+    agent: httpsAgent,
+  });
+
+  if (!response.access_token) {
+    throw new Error(`Token exchange failed: ${JSON.stringify(response)}`);
+  }
+
+  const expiresIn = (response.expires_in || 3600) - 60;
+  _cachedToken = {
+    accessToken: response.access_token,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+
+  logger.info(PREFIX, `Controller token obtained via XIQ exchange, expires in ${expiresIn}s`);
+  return _cachedToken.accessToken;
+}
+
 async function _fetchToken() {
   const { baseUrl, username, password } = config.inlets;
 
@@ -133,4 +178,4 @@ async function fetchJson(url, options = {}) {
   });
 }
 
-export { getToken, invalidateToken };
+export { getToken, invalidateToken, exchangeXiqToken };

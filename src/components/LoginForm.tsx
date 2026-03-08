@@ -48,8 +48,9 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
         return;
       }
 
-      // XIQ token works for everything: XIQ API calls + Campus Controller (XIQ SSO)
-      localStorage.setItem('access_token', json.xiq_access_token);
+      // controller_token is the Campus Controller OAuth2 token (exchanged from XIQ via RFC 7523)
+      // access_token is what the /api/* proxy uses for the controller
+      localStorage.setItem('access_token', json.controller_token || json.xiq_access_token);
       localStorage.setItem('xiq_access_token', json.xiq_access_token);
       localStorage.setItem('xiq_region', region);
       localStorage.setItem('user_email', username);

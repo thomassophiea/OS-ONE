@@ -10,6 +10,7 @@
 
 import express from 'express';
 import { logger } from './redactLogger.js';
+import { exchangeXiqToken } from './tokenService.js';
 
 const PREFIX = 'AuthRoutes';
 const router = express.Router();
@@ -61,11 +62,19 @@ router.post('/xiq-login', async (req, res) => {
 
     logger.info(PREFIX, `XIQ login successful for ${username}`);
 
-    // The XIQ token is used for both XIQ API calls and Campus Controller calls
-    // (controller accepts XIQ tokens via XIQ SSO — no separate credentials needed)
+    // Exchange XIQ token for a Campus Controller token (RFC 7523 JWT Bearer Grant)
+    let controllerToken = null;
+    try {
+      controllerToken = await exchangeXiqToken(json.access_token);
+      logger.info(PREFIX, 'Controller token obtained via XIQ token exchange');
+    } catch (err) {
+      logger.warn(PREFIX, `Controller token exchange failed (will use XIQ token as fallback): ${err.message}`);
+    }
+
     res.json({
       xiq_access_token: json.access_token,
       xiq_token_type: json.token_type || 'Bearer',
+      controller_token: controllerToken,
     });
   } catch (err) {
     logger.error(PREFIX, `XIQ login error: ${err.message}`);
