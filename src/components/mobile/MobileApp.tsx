@@ -8,10 +8,13 @@ import { MobileShell } from './MobileShell';
 import { MobileHeader } from './MobileHeader';
 import { MobileBottomNav, MobileTab } from './MobileBottomNav';
 import { MobileHome } from './MobileHome';
+import { MobileSLEView } from './MobileSLEView';
+import { MobileNetworksList } from './MobileNetworksList';
 import { MobileClientsList } from './MobileClientsList';
 import { MobileAPsList } from './MobileAPsList';
-import { MobileAppsList } from './MobileAppsList';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 import { useHaptic } from '@/hooks/useHaptic';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 interface MobileAppProps {
   theme: 'light' | 'dark' | 'system';
@@ -31,6 +34,7 @@ export function MobileApp({
   onSiteChange,
 }: MobileAppProps) {
   const haptic = useHaptic();
+  const { showPrompt, promptToInstall, dismissPrompt } = usePWAInstall();
   const [activeTab, setActiveTab] = useState<MobileTab>('home');
   const [badges, setBadges] = useState<{ clients?: number; aps?: number; apps?: number }>({});
 
@@ -49,12 +53,14 @@ export function MobileApp({
     switch (activeTab) {
       case 'home':
         return 'Wireless Status';
+      case 'sle':
+        return 'Service Levels';
+      case 'networks':
+        return 'Networks';
       case 'clients':
         return 'Clients';
       case 'aps':
         return 'Access Points';
-      case 'apps':
-        return 'Applications';
       default:
         return 'Wireless Status';
     }
@@ -69,14 +75,27 @@ export function MobileApp({
             currentSite={currentSite}
             onSiteChange={onSiteChange}
             onNavigate={handleNavigate}
+            onStatsUpdate={(offlineAPs, totalClients) => {
+              setBadges({
+                aps: offlineAPs > 0 ? offlineAPs : undefined,
+                clients: totalClients > 0 ? totalClients : undefined,
+              });
+            }}
           />
         );
+      case 'sle':
+        return (
+          <MobileSLEView
+            currentSite={currentSite}
+            onSiteChange={onSiteChange}
+          />
+        );
+      case 'networks':
+        return <MobileNetworksList currentSite={currentSite} />;
       case 'clients':
         return <MobileClientsList currentSite={currentSite} />;
       case 'aps':
-        return <MobileAPsList currentSite={currentSite} />;
-      case 'apps':
-        return <MobileAppsList currentSite={currentSite} />;
+        return <MobileAPsList currentSite={currentSite} onSiteChange={onSiteChange} />;
       default:
         return null;
     }
@@ -105,6 +124,14 @@ export function MobileApp({
           onTabChange={handleTabChange}
           badges={badges}
         />
+
+        {/* PWA Install Prompt */}
+        {showPrompt && (
+          <PWAInstallPrompt
+            onInstall={promptToInstall}
+            onDismiss={dismissPrompt}
+          />
+        )}
       </div>
     </MobileShell>
   );

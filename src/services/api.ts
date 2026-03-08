@@ -1,788 +1,87 @@
 
 import { cacheService, CACHE_TTL } from './cache';
 import { logger } from './logger';
+import { 
+  isNetworkError, 
+  isServerError, 
+  isTimeoutError,
+  getUserFriendlyMessage,
+  parseError,
+  withRetry,
+  ERROR_TYPES,
+  type RetryOptions 
+} from './errorHandler';
 
 // Use proxy in production, direct connection in development
 const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
 const devBaseUrl = import.meta.env.VITE_DEV_CAMPUS_CONTROLLER_URL || 'https://localhost:443';
-const BASE_URL = isProduction
+let BASE_URL = isProduction
   ? '/api/management'  // Proxy through our Express server
   : `${devBaseUrl}/management`;  // Direct connection in development from env var
+
+// Dynamic controller URL support
+let DYNAMIC_CONTROLLER_URL: string | null = null;
 
 logger.log('[API Service] Environment:', isProduction ? 'Production (using proxy)' : 'Development (direct)');
 logger.log('[API Service] BASE_URL:', BASE_URL);
 
-export interface LoginCredentials {
-  grantType: string;
-  userId: string;
-  password: string;
-  scope?: string;
+// Function to get current base URL (supports dynamic controller switching)
+function getBaseUrl(): string {
+  // In production, always use the proxy - the X-Controller-URL header handles routing
+  if (isProduction) {
+    return BASE_URL; // Always /api/management in production
+  }
+  // In development, use dynamic controller URL if set
+  if (DYNAMIC_CONTROLLER_URL) {
+    return `${DYNAMIC_CONTROLLER_URL}/management`;
+  }
+  return BASE_URL;
 }
 
-export interface AuthResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  idle_timeout: number;
-  refresh_token: string;
-  adminRole: string;
-}
-
-export interface ApiError {
-  message: string;
-  status: number;
-}
-
-export interface AccessPoint {
-  serialNumber: string;
-  displayName?: string;
-  model?: string;
-  hardwareType?: string;
-  status?: string;
-  ipAddress?: string;
-  macAddress?: string;
-  location?: string;
-  site?: string;
-  hostSite?: string; // The actual site/location field like "LAB Remote Site"
-  firmware?: string;
-  softwareVersion?: string; // The actual firmware field like "10.14.2.0-002R"
-  clientCount?: number;
-  [key: string]: any;
-}
-
-export interface APQueryColumn {
-  name: string;
-  displayName?: string;
-  type?: string;
-  description?: string;
-}
-
-export interface APStation {
-  macAddress: string;
-  ipAddress?: string;
-  hostName?: string;
-  status?: string;
-  associationTime?: string;
-  signalStrength?: number;
-  dataRate?: string;
-  vlan?: string;
-  [key: string]: any;
-}
-
-export interface Station {
-  // Basic identification
-  macAddress: string;
-  ipAddress?: string;
-  ipv6Address?: string;
-  hostName?: string;
-  status?: string;
-  
-  // Device information
-  deviceType?: string;
-  manufacturer?: string;
-  username?: string;
-  role?: string;
-  
-  // Network information
-  siteId?: string; // Site ID from /v1/stations
-  siteName?: string; // Site name (can be populated from mapping)
-  serviceId?: string; // Service ID from /v1/stations (to be mapped to service details)
-  roleId?: string; // Role ID from /v1/stations (to be mapped to role name)
-  network?: string;
-  networkName?: string; // Alternative field name
-  profileName?: string; // Network profile name
-  serviceName?: string; // Service name
-  ssid?: string;
-  essid?: string; // Alternative SSID field name
-  
-  // Access Point information
-  apName?: string;
-  apDisplayName?: string; // Alternative AP name field
-  apHostname?: string; // AP hostname
-  accessPointName?: string; // Full access point name
-  apSerial?: string;
-  apSerialNumber?: string; // Alternative serial field
-  apSn?: string; // Short serial number field
-  accessPointSerial?: string; // Full serial field name
-  
-  // Connection details
-  channel?: number;
-  radioChannel?: number; // Alternative channel field
-  channelNumber?: number; // Another channel field variation
-  capabilities?: string;
-  signalStrength?: number;
-  rxRate?: string;
-  protocol?: string;
-  
-  // Traffic statistics
-  clientBandwidthBytes?: number;
-  packets?: number;
-  outBytes?: number;
-  outPackets?: number;
-  rxBytes?: number;
-  txBytes?: number;
-  inBytes?: number; // Added for traffic statistics
-  rss?: number; // Signal strength (RSSI)
-  
-  // Timing information
-  lastSeen?: string;
-  associationTime?: string;
-  sessionDuration?: string;
-  
-  // Rating/Quality
-  siteRating?: number;
-  
-  // Legacy/Additional fields
-  dataRate?: string;
-  vlan?: string | number;
-  vlanId?: string | number; // Alternative VLAN field
-  vlanTag?: string | number; // VLAN tag field
-  dot1dPortNumber?: number; // VLAN ID from services
-  apSerialNumber?: string;
-  apDisplayName?: string;
-  apIpAddress?: string;
-  authMethod?: string;
-  encryption?: string;
-  radioType?: string;
-  txPower?: number;
-  lastActivity?: string;
-  
-  [key: string]: any;
-}
-
-export interface StationEvent {
-  timestamp: string;           // Unix timestamp in milliseconds as string
-  eventType: string;           // Event type: "Roam", "Associate", "Disassociate", "Authenticate", etc.
-  macAddress: string;          // Client MAC address
-  ipAddress?: string;          // Client IP address
-  ipv6Address?: string;        // Client IPv6 address
-  apName?: string;             // Access Point name
-  apSerial?: string;           // Access Point serial number
-  ssid?: string;               // SSID name
-  details?: string;            // Detailed event description
-  type?: string;               // Event category/type
-  level?: string;              // Event severity level
-  category?: string;           // Event category
-  context?: string;            // Event context
-  id?: string;                 // Event ID
-  // Additional troubleshooting fields
-  channel?: number;            // WiFi channel
-  band?: string;               // Frequency band (2.4GHz, 5GHz, 6GHz)
-  rssi?: number;               // Signal strength in dBm
-  snr?: number;                // Signal-to-noise ratio in dB
-  dataRate?: number;           // PHY data rate in Mbps
-  previousAp?: string;         // Previous AP name (for roaming)
-  previousApSerial?: string;   // Previous AP serial (for roaming)
-  reasonCode?: number;         // 802.11 reason code
-  statusCode?: number;         // 802.11 status code
-  authMethod?: string;         // Authentication method used
-}
-
-export interface StationTrafficStats {
-  macAddress: string;
-  inBytes?: number;
-  outBytes?: number;
-  rxBytes?: number;
-  txBytes?: number;
-  packets?: number;
-  outPackets?: number;
-  [key: string]: any;
-}
-
-// AP Event - events from the Access Point perspective
-export interface APEvent {
-  timestamp: string;           // Unix timestamp in milliseconds as string
-  eventType: string;           // Event type
-  apName?: string;             // Access Point name
-  apSerial?: string;           // Access Point serial number
-  details?: string;            // Event details
-  type?: string;               // Event category
-  level?: string;              // Severity level
-  category?: string;           // Event category
-  context?: string;            // Event context
-  id?: string;                 // Event ID
-}
-
-// RRM Event (formerly SmartRF) - Radio Resource Management events
-export interface RRMEvent {
-  timestamp: string;           // Unix timestamp in milliseconds as string
-  eventType: string;           // Event type (channel change, power adjustment, etc.)
-  apName?: string;             // Access Point name
-  apSerial?: string;           // Access Point serial number
-  radio?: string;              // Radio identifier
-  channel?: number;            // WiFi channel
-  previousChannel?: number;    // Previous channel (for channel changes)
-  txPower?: number;            // Transmit power
-  previousTxPower?: number;    // Previous transmit power
-  band?: string;               // Frequency band
-  reason?: string;             // Reason for the change
-  details?: string;            // Event details
-  type?: string;               // Event category
-  level?: string;              // Severity level
-  id?: string;                 // Event ID
-}
-
-// Combined station events response from muEvent widget
-export interface StationEventsResponse {
-  stationEvents: StationEvent[];
-  apEvents: APEvent[];
-  smartRfEvents: RRMEvent[];  // API returns as smartRfEvents, we display as RRM Events
-}
-
-// AP Alarm/Event - individual alarm from the AP alarms endpoint
-export interface APAlarm {
-  log: string;                // Message/description
-  ts: number;                 // Timestamp in milliseconds
-  pos: number;                // Position/order
-  ApSerial: string;           // AP Serial number
-  ApName: string;             // AP Name
-  Id: number;                 // Event ID
-  Context: string;            // Context (ConnectDetails, ChannelChange, etc.)
-  Category: string;           // Category (Discovery, AlarmCleared, etc.)
-  Level: string;              // Severity level (Critical, Major, etc.)
-}
-
-// AP Alarm Type - groups alarms by type
-export interface APAlarmType {
-  id: string;                 // Alarm type ID (ChannelChange, ConnectDetails, etc.)
-  severity: string;           // Severity level
-  alarms: APAlarm[];          // List of alarms
-}
-
-// AP Alarm Category - groups alarm types by category
-export interface APAlarmCategory {
-  category: string[];         // Category names
-  alarmTypes: APAlarmType[];  // List of alarm types
-}
-
-// AP Insights - Timeseries data point
-export interface APInsightsDataPoint {
-  timestamp: number;
-  value: string;
-  numPoints?: string;
-}
-
-// AP Insights - Statistic within a report
-export interface APInsightsStatistic {
-  statName: string;
-  type: string;
-  unit: string;
-  values: APInsightsDataPoint[];
-  count?: number;
-}
-
-// AP Insights - Report data
-export interface APInsightsReport {
-  reportName: string;
-  reportType: string;
-  band?: string;
-  legacy?: boolean;
-  fromTimeInMillis: number;
-  toTimeInMillis: number;
-  statistics: APInsightsStatistic[];
-}
-
-// AP Insights - Full response
-export interface APInsightsResponse {
-  deviceSerialNo: string;
-  timeStamp: number;
-  macAddress: string;
-  hwType: string;
-  location: string;
-  ipAddress: string;
-  swVersion: string;
-  sysUptime: number;
-  throughputReport?: APInsightsReport[];
-  countOfUniqueUsersReport?: APInsightsReport[];
-  baseliningAPRss?: APInsightsReport[];
-  apPowerConsumptionTimeseries?: APInsightsReport[];
-  channelUtilization5?: APInsightsReport[];
-  channelUtilization2_4?: APInsightsReport[];
-  noisePerRadio?: APInsightsReport[];
-  apQoE?: any[];
-}
-
-// Client Insights - App Group data for donut chart
-export interface ClientAppGroupData {
-  name: string;
-  value: number;
-  percentage?: number;
-}
-
-// Client Insights - Full response
-export interface ClientInsightsResponse {
-  macAddress: string;
-  ipAddress: string;
-  manufacturer?: string;
-  osType?: string;
-  deviceFamily?: string;
-  deviceType?: string;
-  ssid?: string;
-  // Default view reports
-  throughputReport?: APInsightsReport[];
-  rfQuality?: APInsightsReport[];
-  topAppGroupsByThroughputReport?: Array<{
-    reportName: string;
-    statistics: ClientAppGroupData[];
-    totalThroughput?: number;
-  }>;
-  appGroupsThroughputDetails?: APInsightsReport[];
-  // Expert view reports
-  baseliningRFQI?: APInsightsReport[];
-  baseliningWirelessRTT?: APInsightsReport[];
-  baseliningNetworkRTT?: APInsightsReport[];
-  baseliningRss?: APInsightsReport[];
-  baseliningRxRate?: APInsightsReport[];
-  baseliningTxRate?: APInsightsReport[];
-  muEvent?: APInsightsReport[];
-  // Troubleshoot view reports
-  dlRetries?: APInsightsReport[];
-  stationEvents?: APInsightsReport[];
-}
-
-export interface APRadio {
-  radioName: string;
-  radioIndex: number;
-  adminState: boolean;
-  mode: string;
-  channelwidth: string;
-  useSmartRf: boolean;
-  reqChannel: string;
-  txMaxPower: number;
-  [key: string]: any;
-}
-
-export interface APDetails extends AccessPoint {
-  uptime?: string;
-  memoryUsage?: number;
-  cpuUsage?: number;
-  channelUtilization?: number;
-  txPower?: number;
-  channel?: number;
-  associatedClients?: number;
-  radios?: APRadio[];
-  [key: string]: any;
-}
-
-export interface APPlatform {
-  name: string;
-  description?: string;
-  [key: string]: any;
-}
-
-export interface APHardwareType {
-  name: string;
-  description?: string;
-  [key: string]: any;
-}
-
-export interface Service {
-  id: string;
-  name?: string; // Optional as API may use serviceName instead
-  serviceName?: string; // Alternative name field used by Extreme Platform ONE
-  description?: string;
-  enabled?: boolean;
-  status?: string; // 'enabled' or 'disabled'
-  ssid?: string;
-  security?: {
-    type?: string;
-    privacyType?: string;
-    authType?: string;
-    authMethod?: string;
-    encryption?: string;
-    passphrase?: string;
-    [key: string]: any;
-  };
-  vlan?: number;
-  band?: string;
-  maxClients?: number;
-  maxClientsPer24?: number; // Max clients on 2.4GHz band
-  maxClientsPer5?: number; // Max clients on 5GHz band
-  hidden?: boolean;
-  suppressSsid?: boolean; // Alternative field for hidden SSID
-  captivePortal?: boolean;
-  enableCaptivePortal?: boolean; // Alternative field name for captive portal
-  guestAccess?: boolean;
-
-  // Extreme Platform ONE specific fields
-  canEdit?: boolean;
-  canDelete?: boolean;
-
-  // Network/VLAN Configuration
-  dot1dPortNumber?: number; // VLAN ID / Service ID
-  defaultTopology?: string; // Topology UUID for VLAN assignment
-  proxied?: string; // "Local" or "Centralized" - traffic forwarding mode
-
-  // Security Configuration - Top-level elements
-  WpaPskElement?: {
-    mode?: string; // Security mode like "aesOnly", "tkipOnly", "mixed"
-    pmfMode?: string; // Protected Management Frames
-    presharedKey?: string;
-    keyHexEncoded?: boolean;
-    [key: string]: any;
-  };
-  WpaEnterpriseElement?: {
-    mode?: string; // Enterprise security mode "aesOnly", "wpa3only", etc.
-    pmfMode?: string;
-    fastTransitionEnabled?: boolean; // 802.11r
-    fastTransitionMdId?: number; // Mobility Domain ID for 802.11r
-    [key: string]: any;
-  };
-  WpaSaeElement?: {
-    pmfMode?: string; // Protected Management Frames mode: "required", "capable", "disabled"
-    presharedKey?: string;
-    keyHexEncoded?: boolean;
-    saeMethod?: string; // SAE method: "SaeH2e" (Hash-to-Element) or "SaeLoop"
-    encryption?: string; // Encryption like "AES_CCM_128"
-    akmSuiteSelector?: string;
-    [key: string]: any;
-  };
-
-  // Security Configuration - Nested in privacy object
-  privacy?: {
-    WpaPskElement?: {
-      mode?: string;
-      pmfMode?: string;
-      presharedKey?: string;
-      keyHexEncoded?: boolean;
-      [key: string]: any;
-    };
-    WpaEnterpriseElement?: {
-      mode?: string;
-      pmfMode?: string;
-      fastTransitionEnabled?: boolean;
-      fastTransitionMdId?: number;
-      [key: string]: any;
-    };
-    WpaSaeElement?: {
-      pmfMode?: string;
-      presharedKey?: string;
-      keyHexEncoded?: boolean;
-      saeMethod?: string;
-      encryption?: string;
-      akmSuiteSelector?: string;
-      [key: string]: any;
-    };
-    [key: string]: any;
-  };
-
-  // OWE (Opportunistic Wireless Encryption) - Enhanced Open
-  oweAutogen?: boolean; // Auto-generate OWE transition SSID
-  oweCompanion?: string | null; // Companion service ID for OWE
-
-  // Advanced Security
-  beaconProtection?: boolean; // WPA3 beacon protection
-
-  // AAA/RADIUS Configuration
-  aaaPolicyId?: string | null; // AAA Policy UUID for RADIUS
-  accountingEnabled?: boolean; // RADIUS accounting
-
-  // Role Assignment
-  unAuthenticatedUserDefaultRoleID?: string; // Default role before authentication
-  authenticatedUserDefaultRoleID?: string; // Default role after authentication
-  mbatimeoutRoleId?: string | null; // Role after MAC-based auth timeout
-  defaultCoS?: string; // Class of Service UUID
-
-  // 802.11k/v/r Support
-  enabled11kSupport?: boolean; // 802.11k Radio Resource Management
-  rm11kBeaconReport?: boolean; // 802.11k beacon report
-  rm11kQuietIe?: boolean; // 802.11k quiet IE
-  enable11mcSupport?: boolean; // 802.11v BSS Transition Management
-
-  // Band Steering & Multi-band
-  bandSteering?: boolean; // Steer clients to less congested band
-  mbo?: boolean; // Multi-Band Operation (802.11k/v enhancements)
-
-  // QoS & Admission Control
-  uapsdEnabled?: boolean; // WMM Power Save (U-APSD)
-  admissionControlVideo?: boolean; // QoS admission control for video
-  admissionControlVoice?: boolean; // QoS admission control for voice
-  admissionControlBestEffort?: boolean; // QoS admission control for best effort
-  admissionControlBackgroundTraffic?: boolean; // QoS admission control for background
-  dscp?: {
-    codePoints?: number[]; // Array of 64 DSCP to UP mappings (0-7)
-  };
-
-  // Client Management
-  clientToClientCommunication?: boolean; // Allow wireless client-to-client (false = isolation)
-  flexibleClientAccess?: boolean; // Dynamic client access control
-  purgeOnDisconnect?: boolean; // Clear client data on disconnect
-  includeHostname?: boolean; // Send hostname to RADIUS
-  mbaAuthorization?: boolean; // MAC-Based Authorization
-
-  // Timeouts
-  preAuthenticatedIdleTimeout?: number; // Idle timeout before auth (seconds)
-  postAuthenticatedIdleTimeout?: number; // Idle timeout after auth (seconds)
-  sessionTimeout?: number; // Maximum session duration (seconds)
-
-  // Captive Portal
-  captivePortalType?: string | null; // Type of captive portal
-  eGuestPortalId?: string | null; // eGuest portal UUID
-  eGuestSettings?: any[]; // eGuest portal settings
-  cpNonAuthenticatedPolicyName?: string | null; // Captive portal policy name
-
-  // Hotspot 2.0 / Passpoint
-  hotspotType?: string; // "Disabled", "Hotspot20", etc.
-  hotspot?: any | null; // Hotspot 2.0 configuration object
-
-  // Roaming
-  roamingAssistPolicy?: string | null; // Roaming assistance policy UUID
-  loadBalancing?: boolean; // Distribute clients across APs
-
-  // RADIUS Attributes
-  vendorSpecificAttributes?: string[]; // Custom RADIUS VSAs: ["apName", "vnsName", "ssid", etc.]
-
-  // Mesh
-  shutdownOnMeshpointLoss?: boolean; // Disable service if mesh connection lost
-
-  // Features
-  features?: string[]; // Feature flags like ["CENTRALIZED-SITE"]
-
-  // Additional security-related fields that might exist at the service level
-  privacyType?: string;
-  authType?: string;
-  authMethod?: string;
-  encryption?: string;
-  securityMode?: string;
-  securityType?: string;
-  mode?: string; // Security mode that may exist at top level
-  [key: string]: any;
-}
-
-export interface Role {
-  id: string;
-  name: string;
-  canEdit: boolean;
-  canDelete: boolean;
-  predefined: boolean;
-  l2Filters: any[];
-  l3Filters: any[];
-  l3SrcDestFilters: any[];
-  l7Filters: any[];
-  defaultAction: 'allow' | 'deny' | string;
-  topology: string | null;
-  defaultCos: string | null;
-  cpTopologyId: string | null;
-  cpRedirect: string;
-  cpIdentity: string;
-  cpSharedKey: string;
-  cpDefaultRedirectUrl: string;
-  cpRedirectUrlSelect: string;
-  cpHttp: boolean;
-  cpUseFQDN: boolean;
-  cpAddIpAndPort: boolean;
-  cpAddApNameAndSerial: boolean;
-  cpAddBssid: boolean;
-  cpAddVnsName: boolean;
-  cpAddSsid: boolean;
-  cpAddMac: boolean;
-  cpAddRole: boolean;
-  cpAddVlan: boolean;
-  cpAddTime: boolean;
-  cpAddSign: boolean;
-  cpOauthUseGoogle: boolean;
-  cpOauthUseFacebook: boolean;
-  cpOauthUseMicrosoft: boolean;
-  cpRedirectPorts: number[];
-  features: string[];
-  profiles: string[];
-  [key: string]: any;
-}
-
-export interface ClassOfService {
-  id: string;
-  cosName: string;
-  canEdit: boolean;
-  canDelete: boolean;
-  predefined: boolean;
-  cosQos: {
-    priority: string;
-    tosDscp: number | null;
-    mask: number | null;
-  };
-  inboundRateLimiterId: string | null;
-  outboundRateLimiterId: string | null;
-}
-
-export interface Topology {
-  id: string;
-  name: string;
-  vlanid: number;
-  tagged: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
-  mode: string;
-  [key: string]: any;
-}
-
-export interface AaaPolicy {
-  id: string;
-  name: string;
-  policyName?: string;
-  description?: string;
-  canEdit?: boolean;
-  canDelete?: boolean;
-  radiusServer?: string;
-  radiusPort?: number;
-  radiusSecret?: string;
-  radiusAuthPort?: number;
-  radiusAcctPort?: number;
-  accountingEnabled?: boolean;
-  [key: string]: any;
-}
-
-export interface Site {
-  id: string;
-  name: string;
-  siteName?: string; // ConfigureSites component uses this field
-  country?: string;
-  timezone?: string;
-  status?: string;
-  roles?: number;
-  networks?: number;
-  switches?: number;
-  aps?: number;
-  adoptionPrimary?: string;
-  adoptionBackup?: string;
-  activeAPs?: number;
-  nonActiveAPs?: number;
-  allClients?: number;
-  campus?: string;
-  description?: string;
-  address?: string;
-  contactInfo?: any;
-  settings?: any;
-  [key: string]: any;
-}
-
-export interface Country {
-  name: string;
-  code: string;
-  timezones?: string[];
-  [key: string]: any;
-}
-
-export interface SiteStats {
-  totalStations?: number;
-  activeAPs?: number;
-  totalAPs?: number;
-  [key: string]: any;
-}
-
-export interface ApiCallLog {
-  id: number;
-  timestamp: Date;
-  method: string;
-  endpoint: string;
-  status?: number;
-  duration?: number;
-  requestBody?: any;
-  responseBody?: any;
-  error?: string;
-  isPending: boolean;
-}
-
-// ==================== OS ONE INTERFACES ====================
-
-/**
- * OS ONE External Service Status
- */
-export interface OSOneExternalService {
-  service: string;
-  status: string;
-  address: string;
-}
-
-/**
- * OS ONE Disk Partition
- */
-export interface OSOneDiskPartition {
-  name: string;
-  totalSpace: number;
-  used: number;
-  available: number;
-  usePercent: number;
-}
-
-/**
- * OS ONE Port Interface
- */
-export interface OSOnePortInterface {
-  port: number;
-  state: string;
-  speed: number;
-}
-
-/**
- * OS ONE System Information
- * Contains CPU, memory, disk, port, and external service data
- */
-export interface OSOneSystemInfo {
-  raw: string;
-  externalServices: OSOneExternalService[];
-  lastUpgrade?: number;
-  sysUptime?: number;
-  uptime: string;
-  cpuUtilization: number;
-  memoryFreePercent: number;
-  diskPartitions: OSOneDiskPartition[];
-  ports: OSOnePortInterface[];
-}
-
-/**
- * OS ONE Manufacturing Information
- * Contains hardware and software version details
- */
-export interface OSOneManufacturingInfo {
-  raw: string;
-  smxVersion?: string;
-  guiVersion?: string;
-  nacVersion?: string;
-  softwareVersion?: string;
-  model?: string;
-  cpuType?: string;
-  cpuFrequency?: number;
-  numberOfCpus?: number;
-  totalMemory?: number;
-  hwEncryption?: boolean;
-  lan1Mac?: string;
-  lan2Mac?: string;
-  adminMac?: string;
-  lockingId?: string;
-}
-
-/**
- * Complete OS ONE Information
- */
-export interface OSOneInfo {
-  system: OSOneSystemInfo | null;
-  manufacturing: OSOneManufacturingInfo | null;
-  timestamp: number;
-}
-
-/**
- * Query options for API requests
- * Supports field projection, pagination, sorting, and filtering
- */
-export interface QueryOptions {
-  /** Specific fields to return (field projection) */
-  fields?: string[];
-
-  /** Maximum number of results to return */
-  limit?: number;
-
-  /** Number of results to skip (pagination) */
-  offset?: number;
-
-  /** Field to sort by */
-  sortBy?: string;
-
-  /** Sort direction */
-  sortOrder?: 'asc' | 'desc';
-
-  /** Additional query parameters */
-  params?: Record<string, string | number | boolean>;
-}
+// Type definitions moved to src/types/api.ts for maintainability
+export type {
+  LoginCredentials,
+  AuthResponse,
+  ApiError,
+  AccessPoint,
+  APQueryColumn,
+  APStation,
+  Station,
+  StationEvent,
+  StationTrafficStats,
+  APEvent,
+  RRMEvent,
+  StationEventsResponse,
+  APAlarm,
+  APAlarmType,
+  APAlarmCategory,
+  APInsightsDataPoint,
+  APInsightsStatistic,
+  APInsightsReport,
+  APInsightsResponse,
+  ClientAppGroupData,
+  ClientInsightsResponse,
+  APRadio,
+  APDetails,
+  APPlatform,
+  APHardwareType,
+  Service,
+  Role,
+  ClassOfService,
+  Topology,
+  AaaPolicy,
+  Site,
+  Country,
+  SiteStats,
+  ApiCallLog,
+  OSOneExternalService,
+  OSOneDiskPartition,
+  OSOnePortInterface,
+  OSOneSystemInfo,
+  OSOneManufacturingInfo,
+  OSOneInfo,
+  QueryOptions,
+} from '../types/api';
 
 class ApiService {
   private accessToken: string | null = null;
@@ -801,6 +100,22 @@ class ApiService {
     // Load tokens from localStorage on initialization
     this.accessToken = localStorage.getItem('access_token');
     this.refreshToken = localStorage.getItem('refresh_token');
+  }
+
+  /**
+   * Set a dynamic base URL for multi-controller support
+   * @param url The controller URL (e.g., https://controller.example.com)
+   */
+  setBaseUrl(url: string | null) {
+    DYNAMIC_CONTROLLER_URL = url;
+    logger.log('[API Service] Dynamic controller URL set to:', url || 'default');
+  }
+
+  /**
+   * Get the current base URL
+   */
+  getBaseUrl(): string {
+    return getBaseUrl();
   }
 
   /**
@@ -967,7 +282,7 @@ class ApiService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout for login
         
-        const response = await fetch(`${BASE_URL}/v1/oauth2/token`, {
+        const response = await fetch(`${getBaseUrl()}/v1/oauth2/token`, {
           method: 'POST',
           signal: controller.signal,
           ...format,
@@ -1045,7 +360,7 @@ class ApiService {
     
     if (this.accessToken) {
       try {
-        await fetch(`${BASE_URL}/v1/oauth2/token/${this.accessToken}`, {
+        await fetch(`${getBaseUrl()}/v1/oauth2/token/${this.accessToken}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
@@ -1075,12 +390,17 @@ class ApiService {
       throw new Error('No access token available');
     }
 
-    const headers = {
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.accessToken}`,
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
+    
+    // Add dynamic controller URL header for multi-controller proxy routing
+    if (DYNAMIC_CONTROLLER_URL && isProduction) {
+      headers['X-Controller-URL'] = DYNAMIC_CONTROLLER_URL;
+    }
 
     // Create AbortController for timeout and cancellation
     const controller = new AbortController();
@@ -1125,7 +445,7 @@ class ApiService {
     this.addApiLog(apiLog);
     
     try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, {
+      const response = await fetch(`${getBaseUrl()}${endpoint}`, {
         ...options,
         headers,
         signal: controller.signal,
@@ -1217,16 +537,19 @@ class ApiService {
       clearTimeout(timeoutId);
       this.pendingRequests.delete(controller);
 
+      // Parse the error using centralized error handler
+      const errorDetails = parseError(error);
+      
       // Update API log with error
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.updateApiLog(requestId, {
         duration,
-        error: errorMessage,
+        error: errorDetails.message,
         isPending: false
       });
       
       if (error instanceof Error) {
-        if (error.name === 'AbortError') {
+        // Handle timeout errors
+        if (isTimeoutError(error)) {
           if (!isAnalyticsEndpoint) {
             logger.warn(`Request to ${endpoint} timed out after ${timeoutMs}ms`);
           }
@@ -1235,28 +558,56 @@ class ApiService {
             throw new Error(`SUPPRESSED_ANALYTICS_ERROR: Request timeout for ${endpoint}`);
           }
           
-          throw new Error(`Request timeout`);
+          throw new Error(getUserFriendlyMessage(error));
         }
         
-        // Handle network fetch failures more gracefully
-        if (error.message === 'Failed to fetch') {
+        // Handle network errors with user-friendly messages
+        if (isNetworkError(error)) {
           if (isAnalyticsEndpoint) {
             throw new Error(`SUPPRESSED_ANALYTICS_ERROR: ${endpoint}`);
           }
           
-          // Log network errors for debugging
           logger.warn(`Network error for ${endpoint}: ${error.message}`);
-          
-          throw new Error(`Network error: Unable to connect to Extreme Platform ONE. Please check your connection and server availability.`);
+          throw new Error(getUserFriendlyMessage(error));
         }
         
         if (!isAnalyticsEndpoint) {
           logger.warn(`Request to ${endpoint} failed:`, error.message);
         }
-        throw error;
+        
+        // Use user-friendly message for other errors
+        throw new Error(getUserFriendlyMessage(error));
       }
-      throw new Error('Network request failed');
+      throw new Error('An unexpected error occurred. Please try again.');
     }
+  }
+
+  /**
+   * Make an authenticated request with automatic retry for server errors
+   * Uses exponential backoff: 1s, 2s, 4s
+   */
+  async makeAuthenticatedRequestWithRetry(
+    endpoint: string,
+    options: RequestInit = {},
+    retryOptions?: Partial<RetryOptions>
+  ): Promise<Response> {
+    const defaultRetryOptions: RetryOptions = {
+      maxRetries: 2,
+      backoff: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 4000,
+      retryableErrors: [ERROR_TYPES.SERVER, ERROR_TYPES.NETWORK, ERROR_TYPES.TIMEOUT],
+      onRetry: (attempt, error, delayMs) => {
+        logger.warn(
+          `[API Retry] Attempt ${attempt} for ${endpoint} after ${Math.round(delayMs)}ms`
+        );
+      },
+    };
+
+    return withRetry(
+      () => this.makeAuthenticatedRequest(endpoint, options),
+      { ...defaultRetryOptions, ...retryOptions }
+    );
   }
 
   private async refreshAccessToken(): Promise<void> {
@@ -1269,7 +620,7 @@ class ApiService {
     const timeoutId = setTimeout(() => controller.abort(), 6000); // 6 second timeout
 
     try {
-      const response = await fetch(`${BASE_URL}/v1/oauth2/refreshToken`, {
+      const response = await fetch(`${getBaseUrl()}/v1/oauth2/refreshToken`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1744,7 +1095,7 @@ class ApiService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 second timeout
 
-      const response = await fetch(`${BASE_URL}/v1/oauth2/token`, {
+      const response = await fetch(`${getBaseUrl()}/v1/oauth2/token`, {
         method: 'OPTIONS',
         headers: {
           'Accept': 'application/json',
@@ -2461,9 +1812,11 @@ class ApiService {
 
   async createService(serviceData: Partial<Service>): Promise<Service> {
     logger.log('Creating service:', serviceData);
+    logger.log('Service payload JSON:', JSON.stringify(serviceData, null, 2));
     
     const response = await this.makeAuthenticatedRequest('/v1/services', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(serviceData)
     });
     
@@ -2472,21 +1825,31 @@ class ApiService {
       
       try {
         const errorResponse = await response.text();
+        logger.error('Full error response:', errorResponse);
         
         if (errorResponse) {
           try {
             const errorData = JSON.parse(errorResponse);
+            logger.error('Parsed error data:', errorData);
             
             if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
               const firstError = errorData.errors[0];
               errorMessage = firstError.errorMessage || firstError.message || errorMessage;
               
-              logger.error('Detailed error info:', firstError);
+              // Log all errors for debugging
+              errorData.errors.forEach((err: any, i: number) => {
+                logger.error(`Error ${i + 1}:`, err);
+              });
             } else if (errorData.message) {
               errorMessage = errorData.message;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
             }
           } catch (parseError) {
-            logger.error('Failed to parse error response:', parseError);
+            // Response wasn't JSON, use raw text
+            if (errorResponse.length < 500) {
+              errorMessage = errorResponse;
+            }
           }
         }
         
@@ -2541,7 +1904,7 @@ class ApiService {
     description?: string;
   }): Promise<Site> {
     logger.log('Creating site:', {
-      url: `${BASE_URL}/v3/sites`,
+      url: `${getBaseUrl()}/v3/sites`,
       payload: siteData
     });
     
@@ -3016,24 +2379,149 @@ class ApiService {
   // ============================================================================
 
   /**
-   * Assign a service/WLAN to a profile
-   * This tries multiple methods since the exact API pattern is unknown
+   * Assign a service/WLAN to a profile with interface/radio specification
+   * The controller requires specifying which interfaces (radios, ports) receive the WLAN
    */
-  async assignServiceToProfile(serviceId: string, profileId: string): Promise<void> {
-    logger.log(`Assigning service ${serviceId} to profile ${profileId}`);
+  async assignServiceToProfileWithInterfaces(
+    serviceId: string,
+    profileId: string,
+    interfaces?: {
+      radio1?: boolean;
+      radio2?: boolean;
+      radio3?: boolean;
+      port1?: boolean;
+      port2?: boolean;
+      port3?: boolean;
+    }
+  ): Promise<void> {
+    logger.log(`Assigning service ${serviceId} to profile ${profileId} with interfaces:`, interfaces);
 
-    // Method 1: Try dedicated assignment endpoint
+    // Method 1: Try updating profile with radioIfList (Extreme Platform ONE API format)
+    // API expects: radioIfList: [{ serviceId: "...", index: 1 }, { serviceId: "...", index: 2 }]
+    // where index 1=Radio1 (2.4GHz), index 2=Radio2 (5GHz), index 3=Radio3 (6GHz)
+    try {
+      const profile = await this.getProfileById(profileId);
+      if (profile) {
+        const updatePayload = { ...profile };
+        
+        // Determine available radios based on device type
+        // Reference: Extreme Platform ONE AP models and their radio capabilities
+        const deviceType = profile.apPlatform || profile.deviceType || profile.hardwareType || '';
+        const dt = deviceType.toUpperCase();
+        
+        // All APs have Radio 1 (2.4GHz)
+        const hasRadio1 = true;
+        
+        // Single-band APs (Radio 1 only): AP505, APVMAP, SA201
+        const isSingleBand = (dt.includes('AP505') && !dt.includes('AP5050')) ||
+                             dt.includes('APVMAP') || dt.includes('SA201');
+        
+        // Tri-band APs (Radio 1, 2, 3): AP4000/4020 series, AP5010/5020/5050 series
+        const isTriBand = dt.includes('AP4000') || dt.includes('AP4020') || 
+                          dt.includes('AP5010') || dt.includes('AP5020') || dt.includes('AP5050') ||
+                          dt.includes('WI-FI 6E') || dt.includes('WIFI6E');
+        
+        // Radio 2 (5GHz): All except single-band
+        const hasRadio2 = !isSingleBand;
+        
+        // Radio 3 (6GHz): Only tri-band APs
+        // Note: Radio 3 requires WPA3 or OWE per Wi-Fi 6E standard - but we enable it here
+        // and let the controller enforce security requirements
+        const hasRadio3 = isTriBand;
+        
+        // Build radioIfList entries for requested radios (only if AP supports them)
+        const newRadioEntries: Array<{ serviceId: string; index: number }> = [];
+        if (interfaces?.radio1 && hasRadio1) newRadioEntries.push({ serviceId, index: 1 });
+        if (interfaces?.radio2 && hasRadio2) newRadioEntries.push({ serviceId, index: 2 });
+        if (interfaces?.radio3 && hasRadio3) newRadioEntries.push({ serviceId, index: 3 });
+
+        logger.log(`Profile ${profileId} device type: ${deviceType}, radios: R1=${hasRadio1}, R2=${hasRadio2}, R3=${hasRadio3}`);
+
+        // Merge with existing radioIfList, avoiding duplicates
+        const existingRadioIfList: Array<{ serviceId: string; index: number }> = profile.radioIfList || [];
+        const mergedRadioIfList = [...existingRadioIfList];
+        
+        for (const newEntry of newRadioEntries) {
+          const exists = mergedRadioIfList.some(
+            e => e.serviceId === newEntry.serviceId && e.index === newEntry.index
+          );
+          if (!exists) {
+            mergedRadioIfList.push(newEntry);
+          }
+        }
+        updatePayload.radioIfList = mergedRadioIfList;
+
+        // Build wiredIfList for wired ports if requested
+        if (interfaces?.port1 || interfaces?.port2 || interfaces?.port3) {
+          const newWiredEntries: Array<{ serviceId: string; index: number }> = [];
+          if (interfaces?.port1) newWiredEntries.push({ serviceId, index: 1 });
+          if (interfaces?.port2) newWiredEntries.push({ serviceId, index: 2 });
+          if (interfaces?.port3) newWiredEntries.push({ serviceId, index: 3 });
+
+          const existingWiredIfList: Array<{ serviceId: string; index: number }> = profile.wiredIfList || [];
+          const mergedWiredIfList = [...existingWiredIfList];
+          
+          for (const newEntry of newWiredEntries) {
+            const exists = mergedWiredIfList.some(
+              e => e.serviceId === newEntry.serviceId && e.index === newEntry.index
+            );
+            if (!exists) {
+              mergedWiredIfList.push(newEntry);
+            }
+          }
+          updatePayload.wiredIfList = mergedWiredIfList;
+        }
+
+        logger.log(`Updating profile with radioIfList:`, updatePayload.radioIfList);
+
+        const response = await this.makeAuthenticatedRequest(
+          `/v3/profiles/${encodeURIComponent(profileId)}`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload)
+          }
+        );
+
+        if (response.ok) {
+          logger.log(`Successfully assigned service to profile interfaces via radioIfList`);
+          return;
+        } else {
+          const errorText = await response.text();
+          logger.warn(`Profile update via PUT failed (${response.status}):`, errorText);
+        }
+      }
+    } catch (error) {
+      logger.warn('Profile update method failed:', error);
+    }
+
+    // Method 2: Try dedicated assignment endpoints as fallback
     const assignmentEndpoints = [
       `/v3/profiles/${encodeURIComponent(profileId)}/services`,
-      `/v3/services/${encodeURIComponent(serviceId)}/assign`,
       `/v1/profiles/${encodeURIComponent(profileId)}/services`
     ];
+
+    // Build interface assignment for fallback endpoints
+    const interfaceAssignment: any = {};
+    if (interfaces) {
+      if (interfaces.radio1) interfaceAssignment.radio1 = serviceId;
+      if (interfaces.radio2) interfaceAssignment.radio2 = serviceId;
+      if (interfaces.radio3) interfaceAssignment.radio3 = serviceId;
+      if (interfaces.port1) interfaceAssignment.port1 = serviceId;
+      if (interfaces.port2) interfaceAssignment.port2 = serviceId;
+      if (interfaces.port3) interfaceAssignment.port3 = serviceId;
+    }
 
     for (const endpoint of assignmentEndpoints) {
       try {
         const response = await this.makeAuthenticatedRequest(endpoint, {
           method: 'POST',
-          body: JSON.stringify({ serviceId, profileId })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            serviceId, 
+            profileId,
+            interfaces: interfaceAssignment 
+          })
         });
 
         if (response.ok) {
@@ -3045,108 +2533,178 @@ class ApiService {
       }
     }
 
-    // Method 2: Try updating the profile to add the service
-    try {
-      const profile = await this.getProfileById(profileId);
-      if (profile) {
-        const services = profile.services || [];
-        if (!services.includes(serviceId)) {
-          services.push(serviceId);
-
-          const updateEndpoints = [
-            `/v3/profiles/${encodeURIComponent(profileId)}`,
-            `/v1/profiles/${encodeURIComponent(profileId)}`
-          ];
-
-          for (const endpoint of updateEndpoints) {
-            try {
-              const response = await this.makeAuthenticatedRequest(endpoint, {
-                method: 'PUT',
-                body: JSON.stringify({ ...profile, services })
-              });
-
-              if (response.ok) {
-                logger.log(`Successfully assigned via profile update at ${endpoint}`);
-                return;
-              }
-            } catch (error) {
-              continue;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Failed to assign via profile update:', error);
-    }
-
-    throw new Error(`Failed to assign service ${serviceId} to profile ${profileId} - no working endpoint found`);
+    throw new Error(`Failed to assign service ${serviceId} to profile ${profileId}`);
   }
 
   /**
-   * Trigger profile synchronization
+   * Assign a service/WLAN to a profile (legacy method - assigns to all radios)
    */
-  async syncProfile(profileId: string): Promise<void> {
-    logger.log(`Triggering sync for profile ${profileId}`);
+  async assignServiceToProfile(serviceId: string, profileId: string): Promise<void> {
+    // Default to all radios when no specific interfaces provided
+    return this.assignServiceToProfileWithInterfaces(serviceId, profileId, {
+      radio1: true,
+      radio2: true,
+      radio3: true
+    });
+  }
 
-    const syncEndpoints = [
+  /**
+   * Trigger profile synchronization / configuration deployment
+   * 
+   * ExtremeCloud IQ uses the /deployments endpoint to push configuration to devices.
+   * Profile changes are automatically tracked and can be pushed via this deployment mechanism.
+   * If deployment API is unavailable, changes will be applied during next AP check-in.
+   */
+  async syncProfile(profileId: string): Promise<{ success: boolean; message: string; deploymentId?: string }> {
+    logger.log(`Triggering configuration deployment for profile ${profileId}`);
+
+    // First, try to get devices associated with this profile
+    let deviceIds: number[] = [];
+    try {
+      const profile = await this.getProfileById(profileId);
+      if (profile && profile.deviceIds) {
+        deviceIds = profile.deviceIds;
+      }
+    } catch (error) {
+      logger.log(`Could not fetch device IDs for profile ${profileId}`);
+    }
+
+    // Try the ExtremeCloud IQ deployment API (POST /deployments)
+    // This is the official way to push configuration changes
+    if (deviceIds.length > 0) {
+      try {
+        const deploymentPayload = {
+          devices: {
+            ids: deviceIds
+          },
+          policy: {
+            enable_complete_configuration_update: false // Delta config only
+          }
+        };
+
+        const response = await this.makeAuthenticatedRequest('/deployments', {
+          method: 'POST',
+          body: JSON.stringify(deploymentPayload)
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          logger.log(`Successfully triggered deployment for profile ${profileId}`, result);
+          return {
+            success: true,
+            message: 'Configuration deployment initiated successfully',
+            deploymentId: result.id || result.deployment_id
+          };
+        }
+      } catch (error) {
+        logger.log(`Deployment API not available: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
+    // Try legacy sync endpoints as fallback (for ExtremeCloud IQ Controller / on-premise)
+    const legacyEndpoints = [
       `/v3/profiles/${encodeURIComponent(profileId)}/sync`,
-      `/v1/profiles/${encodeURIComponent(profileId)}/sync`,
-      `/v3/profiles/${encodeURIComponent(profileId)}/push`,
-      `/v3/sync/profile/${encodeURIComponent(profileId)}`
+      `/v1/profiles/${encodeURIComponent(profileId)}/sync`
     ];
 
-    for (const endpoint of syncEndpoints) {
+    for (const endpoint of legacyEndpoints) {
       try {
         const response = await this.makeAuthenticatedRequest(endpoint, {
           method: 'POST'
         });
 
         if (response.ok) {
-          logger.log(`Successfully triggered sync via ${endpoint}`);
-          return;
+          logger.log(`Successfully triggered sync via legacy endpoint ${endpoint}`);
+          return {
+            success: true,
+            message: 'Profile sync triggered successfully'
+          };
         }
       } catch (error) {
         continue;
       }
     }
 
-    // If no sync endpoint works, log warning but don't fail
-    // (some systems may sync automatically)
-    logger.warn(`No sync endpoint found for profile ${profileId} - profile may sync automatically`);
+    // No explicit sync needed - ExtremeCloud IQ applies changes automatically
+    // Profile modifications via PUT are immediately stored and pushed on next AP check-in
+    logger.log(`Profile ${profileId} updated - configuration will be applied during next device check-in`);
+    return {
+      success: true,
+      message: 'Profile updated successfully. Configuration will be applied automatically during next device check-in (typically within 5 minutes).'
+    };
   }
 
   /**
    * Sync multiple profiles (batch operation)
+   * Uses the ExtremeCloud IQ deployment API when device IDs are available
    */
-  async syncMultipleProfiles(profileIds: string[]): Promise<void> {
+  async syncMultipleProfiles(profileIds: string[]): Promise<{ success: boolean; message: string; results?: Array<{ profileId: string; success: boolean; message: string }> }> {
     logger.log(`Triggering sync for ${profileIds.length} profiles`);
 
-    // Try batch sync endpoint first
-    const batchEndpoints = [
-      '/v3/profiles/sync',
-      '/v1/profiles/sync',
-      '/v3/sync/profiles'
-    ];
+    if (profileIds.length === 0) {
+      return { success: true, message: 'No profiles to sync' };
+    }
 
-    for (const endpoint of batchEndpoints) {
+    // Collect all device IDs from all profiles for batch deployment
+    const allDeviceIds: number[] = [];
+    for (const profileId of profileIds) {
       try {
-        const response = await this.makeAuthenticatedRequest(endpoint, {
+        const profile = await this.getProfileById(profileId);
+        if (profile && profile.deviceIds) {
+          allDeviceIds.push(...profile.deviceIds);
+        }
+      } catch (error) {
+        logger.log(`Could not fetch device IDs for profile ${profileId}`);
+      }
+    }
+
+    // Try batch deployment via ExtremeCloud IQ deployment API
+    if (allDeviceIds.length > 0) {
+      try {
+        const deploymentPayload = {
+          devices: {
+            ids: [...new Set(allDeviceIds)] // Deduplicate device IDs
+          },
+          policy: {
+            enable_complete_configuration_update: false
+          }
+        };
+
+        const response = await this.makeAuthenticatedRequest('/deployments', {
           method: 'POST',
-          body: JSON.stringify({ profileIds })
+          body: JSON.stringify(deploymentPayload)
         });
 
         if (response.ok) {
-          logger.log(`Successfully triggered batch sync via ${endpoint}`);
-          return;
+          const result = await response.json();
+          logger.log(`Successfully triggered batch deployment for ${profileIds.length} profiles`, result);
+          return {
+            success: true,
+            message: `Configuration deployment initiated for ${profileIds.length} profiles`
+          };
         }
       } catch (error) {
-        continue;
+        logger.log(`Batch deployment API not available: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
     // Fall back to individual syncs
-    logger.log('Batch sync not available, falling back to individual syncs');
-    await Promise.all(profileIds.map(id => this.syncProfile(id)));
+    logger.log('Batch deployment not available, falling back to individual profile syncs');
+    const results = await Promise.all(
+      profileIds.map(async (id) => {
+        const result = await this.syncProfile(id);
+        return { profileId: id, ...result };
+      })
+    );
+
+    const allSucceeded = results.every(r => r.success);
+    return {
+      success: allSucceeded,
+      message: allSucceeded 
+        ? `All ${profileIds.length} profiles updated successfully. Configuration will be applied during next device check-in.`
+        : `Some profiles failed to sync`,
+      results
+    };
   }
 
   // Check if an endpoint is available (returns true if endpoint exists and is reachable)

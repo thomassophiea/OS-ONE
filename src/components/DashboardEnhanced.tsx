@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
@@ -1458,22 +1459,39 @@ function DashboardEnhancedComponent() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
+        {/* Header skeleton */}
         <div className="flex items-center justify-between">
-          <h2 className="text-3xl tracking-tight">Dashboard</h2>
-          <div className="h-10 w-32 bg-muted rounded animate-pulse" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-6 w-6 rounded-full" />
+            <Skeleton className="h-6 w-56" />
+          </div>
+          <Skeleton className="h-8 w-24" />
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          {[1,2,3,4].map(i => (
+        {/* Metric cards skeleton — matches the 4-col grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
-              <CardHeader className="pb-3">
-                <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
               </CardHeader>
               <CardContent>
-                <div className="h-8 w-16 bg-muted rounded animate-pulse" />
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-32" />
               </CardContent>
             </Card>
           ))}
+        </div>
+        {/* Chart area skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent><Skeleton className="h-48 w-full" /></CardContent>
+          </Card>
+          <Card>
+            <CardHeader><Skeleton className="h-5 w-40" /></CardHeader>
+            <CardContent><Skeleton className="h-48 w-full" /></CardContent>
+          </Card>
         </div>
       </div>
     );

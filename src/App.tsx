@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense, useMemo } from 'react';
+import { useState, useEffect, lazy, Suspense, useMemo, startTransition } from 'react';
 import { useGlobalFilters } from './hooks/useGlobalFilters';
 import type { AssistantContext } from './components/NetworkChatbot';
 import { LoginForm } from './components/LoginForm';
@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar';
 import { MobileApp } from './components/mobile/MobileApp';
 import { DetailSlideOut } from './components/DetailSlideOut';
 import { PlaceholderPage } from './components/PlaceholderPage';
+import { PerformanceAnalytics } from './components/PerformanceAnalytics';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy load route components for better performance with prefetch
@@ -13,14 +14,13 @@ const DashboardEnhanced = lazy(() => import('./components/DashboardEnhanced').th
 const AccessPoints = lazy(() => import('./components/AccessPoints').then(m => ({ default: m.AccessPoints })));
 const TrafficStatsConnectedClients = lazy(() => import('./components/TrafficStatsConnectedClients').then(m => ({ default: m.TrafficStatsConnectedClients })));
 
-// Prefetch critical components after initial load
+import { prefetchOnIdle } from './lib/prefetch';
+
 const prefetchCriticalComponents = () => {
-  // Prefetch most commonly accessed pages
-  setTimeout(() => {
-    import('./components/AccessPoints');
-    import('./components/TrafficStatsConnectedClients');
-    import('./components/ReportWidgets');
-  }, 2000); // Delay to not block initial render
+  prefetchOnIdle(() => import('./components/AccessPoints'));
+  prefetchOnIdle(() => import('./components/TrafficStatsConnectedClients'));
+  prefetchOnIdle(() => import('./components/ReportWidgets'));
+  prefetchOnIdle(() => import('./components/ConfigureNetworks'));
 };
 const ServiceLevelsEnhanced = lazy(() => import('./components/ServiceLevelsEnhanced').then(m => ({ default: m.ServiceLevelsEnhanced })));
 const SLEDashboard = lazy(() => import('./components/sle/SLEDashboard').then(m => ({ default: m.SLEDashboard })));
@@ -56,8 +56,9 @@ const SynthwaveMusicPlayer = lazy(() => import('./components/SynthwaveMusicPlaye
 import { apiService, ApiCallLog } from './services/api';
 import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
+import { PageSkeleton, getSkeletonVariant } from './components/ui/PageSkeleton';
 import { Button } from './components/ui/button';
-import { Activity, Sun, Moon, Braces, Github, FlaskConical } from 'lucide-react';
+import { Activity, Sun, Moon, Braces, Github, FlaskConical, BarChart3 } from 'lucide-react';
 import { AppsMenu } from './components/AppsMenu';
 import { UserMenu } from './components/UserMenu';
 import { NotificationsMenu } from './components/NotificationsMenu';
@@ -199,24 +200,17 @@ export default function App() {
         setIsAuthenticated(true);
         setAdminRole(apiService.getAdminRole());
 
-        // Load site information
+        // Load site information — use first available site from the account
         try {
-          const SITE_ID = 'c7395471-aa5c-46dc-9211-3ed24c5789bd';
-          const site = await apiService.getSiteById(SITE_ID);
-          if (site) {
-            const displayName = site.displayName || site.name || site.siteName || 'Production Site';
+          const sites = await apiService.getSites();
+          if (sites && sites.length > 0) {
+            const firstSite = sites[0];
+            const displayName = firstSite.displayName || firstSite.name || firstSite.siteName || 'Site';
             setSiteName(displayName);
-          } else {
-            const sites = await apiService.getSites();
-            if (sites && sites.length > 0) {
-              const firstSite = sites[0];
-              const displayName = firstSite.displayName || firstSite.name || firstSite.siteName || 'Site';
-              setSiteName(displayName);
-            }
           }
         } catch (error) {
           console.error('[App] Failed to load site name:', error);
-          setSiteName('Production Site');
+          setSiteName('Site');
         }
 
         // Start SLE data collection automatically on successful authentication
@@ -718,27 +712,17 @@ export default function App() {
     // Prefetch critical components for faster navigation
     prefetchCriticalComponents();
 
-    // Load site information
+    // Load site information — use first available site from the account
     try {
-      const SITE_ID = 'c7395471-aa5c-46dc-9211-3ed24c5789bd';
-      const site = await apiService.getSiteById(SITE_ID);
-      if (site) {
-        const displayName = site.displayName || site.name || site.siteName || 'Production Site';
-        console.log('[App] Loaded site:', displayName);
+      const sites = await apiService.getSites();
+      if (sites && sites.length > 0) {
+        const firstSite = sites[0];
+        const displayName = firstSite.displayName || firstSite.name || firstSite.siteName || 'Site';
         setSiteName(displayName);
-      } else {
-        // Fallback to first available site
-        const sites = await apiService.getSites();
-        if (sites && sites.length > 0) {
-          const firstSite = sites[0];
-          const displayName = firstSite.displayName || firstSite.name || firstSite.siteName || 'Site';
-          console.log('[App] Fallback to first site:', displayName);
-          setSiteName(displayName);
-        }
       }
     } catch (error) {
       console.error('[App] Failed to load site name:', error);
-      setSiteName('Production Site'); // Default fallback
+      setSiteName('Site');
     }
 
     // Start SLE data collection on login
@@ -762,7 +746,10 @@ export default function App() {
     console.log(`Switching to page: ${page}, canceling pending requests`);
     apiService.cancelAllRequests();
     
-    setCurrentPage(page);
+    // Use startTransition to keep old content visible while loading new page
+    startTransition(() => {
+      setCurrentPage(page);
+    });
     // Close detail panel when changing pages
     setDetailPanel({ isOpen: false, type: null, data: null });
   };
@@ -882,8 +869,7 @@ export default function App() {
       case 'connected-clients':
         return <TrafficStatsConnectedClients onShowDetail={handleShowClientDetail} />;
       case 'performance-analytics':
-        const performanceAnalyticsInfo = pageInfo['performance-analytics'];
-        return <PlaceholderPage title={performanceAnalyticsInfo.title} description={performanceAnalyticsInfo.description} />;
+        return <PerformanceAnalytics />;
       case 'report-widgets':
         return <ReportWidgets />;
       case 'pci-report':
@@ -1136,18 +1122,14 @@ export default function App() {
             </div>
 
             <div>
-              <Suspense fallback={
-                <div className="flex items-center justify-center h-64">
-                  <div className="text-center">
-                    <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status">
-                      <span className="sr-only">Loading...</span>
-                    </div>
-                    <p className="mt-4 text-sm text-muted-foreground">Loading page...</p>
+              {/* key=currentPage resets the boundary automatically on navigation */}
+              <ErrorBoundary key={currentPage} fallbackTitle="Page Error">
+                <Suspense fallback={<PageSkeleton variant={getSkeletonVariant(currentPage)} />}>
+                  <div className="animate-in fade-in duration-300">
+                    {renderPage()}
                   </div>
-                </div>
-              }>
-                {renderPage()}
-              </Suspense>
+                </Suspense>
+              </ErrorBoundary>
             </div>
           </div>
         </main>

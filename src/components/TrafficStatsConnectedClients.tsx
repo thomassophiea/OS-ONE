@@ -20,6 +20,7 @@ import { isRandomizedMac, getMacAddressInfo } from '../services/macAddressUtils'
 import { resolveClientIdentity, type ClientIdentity } from '../lib/clientIdentity';
 import { toast } from 'sonner';
 import { SaveToWorkspace } from './SaveToWorkspace';
+import { ExportButton } from './ExportButton';
 import { useTableCustomization } from '../hooks/useTableCustomization';
 import { DetailSlideOut } from './DetailSlideOut';
 import { DEVICE_MONITORING_COLUMNS } from '../config/deviceMonitoringColumns';
@@ -873,6 +874,23 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                 <Columns className="mr-2 h-4 w-4" />
                 Customize Columns
               </Button>
+              <ExportButton
+                data={sortedStations}
+                columns={[
+                  { key: 'hostName', label: 'Hostname' },
+                  { key: 'macAddress', label: 'MAC Address' },
+                  { key: 'ipAddress', label: 'IP Address' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'apName', label: 'Access Point' },
+                  { key: 'ssid', label: 'SSID' },
+                  { key: 'band', label: 'Band' },
+                  { key: 'signalStrength', label: 'Signal (dBm)' },
+                  { key: 'deviceType', label: 'Device Type' },
+                  { key: 'siteName', label: 'Site' },
+                ]}
+                filename="connected-clients"
+                title="Connected Clients"
+              />
               <SaveToWorkspace
                 widgetId="connected-clients-table"
                 widgetType="topn_table"
@@ -960,7 +978,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                       <Checkbox
                         checked={selectedStations.size === paginatedStations.length && paginatedStations.length > 0}
                         onCheckedChange={handleSelectAll}
-                        className="h-3 w-3"
+                        className="h-3 w-3 border-muted-foreground/50"
                       />
                     </TableHead>
                     {/* Dynamic columns from customization */}
@@ -1054,7 +1072,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                           <Checkbox
                             checked={selectedStations.has(station.macAddress)}
                             onCheckedChange={(checked) => handleStationSelect(station.macAddress, checked as boolean)}
-                            className="h-3 w-3"
+                            className="h-3 w-3 border-muted-foreground/50"
                             onClick={(e) => e.stopPropagation()}
                           />
                         </TableCell>

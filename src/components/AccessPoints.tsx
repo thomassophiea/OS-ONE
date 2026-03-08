@@ -9,7 +9,7 @@ import { DetailSlideOut } from './DetailSlideOut';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { AlertCircle, Wifi, Search, RefreshCw, Filter, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Building, Info, Columns, Anchor, Phone, FileDown, Radio, Cable } from 'lucide-react';
+import { AlertCircle, Wifi, Search, RefreshCw, Filter, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Building, Info, Columns, Anchor, Phone, FileDown, Radio, Cable, Loader2 } from 'lucide-react';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
@@ -17,6 +17,7 @@ import { Checkbox } from './ui/checkbox';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
 import { apiService, AccessPoint, APDetails, APStation, APQueryColumn, Site } from '../services/api';
+import { ExportButton } from './ExportButton';
 import { toast } from 'sonner';
 import { SaveToWorkspace } from './SaveToWorkspace';
 
@@ -1700,31 +1701,51 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        
+      <div className="space-y-6 animate-in fade-in duration-200">
+        {/* Header skeleton */}
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-4 w-72" />
+          <div className="flex gap-2">
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+        </div>
+        {/* Stat cards skeleton */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-4 w-20" />
-              </CardHeader>
+              <CardHeader className="pb-2"><Skeleton className="h-4 w-24" /></CardHeader>
               <CardContent>
-                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-20" />
               </CardContent>
             </Card>
           ))}
         </div>
-        
+        {/* Search/filter bar skeleton */}
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-9 w-40" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+        {/* Table skeleton */}
         <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+          <CardContent className="p-0">
+            <div className="border-b px-4 py-3 flex gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-4 w-20" />
               ))}
             </div>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="px-4 py-3 flex gap-6 border-b last:border-0">
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-12" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-10" />
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
@@ -1732,7 +1753,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1786,6 +1807,21 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             <Columns className="mr-2 h-4 w-4" />
             Customize Columns
           </Button>
+          <ExportButton
+            data={sortedAccessPoints}
+            columns={[
+              { key: 'name', label: 'Name' },
+              { key: 'serialNumber', label: 'Serial Number' },
+              { key: 'status', label: 'Status' },
+              { key: 'model', label: 'Model' },
+              { key: 'ipAddress', label: 'IP Address' },
+              { key: 'macAddress', label: 'MAC Address' },
+              { key: 'siteName', label: 'Site' },
+              { key: 'firmwareVersion', label: 'Firmware' },
+            ]}
+            filename="access-points"
+            title="Access Points"
+          />
         </div>
       </div>
 

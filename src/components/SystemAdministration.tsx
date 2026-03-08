@@ -6,7 +6,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
-import { Skeleton } from './ui/skeleton';
+import { Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 import {
   Settings,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
+import type { NetworkTimeConfig, SNMPConfig, SystemLoggingConfig, SystemInfo } from '../types/system';
 
 interface SystemConfig {
   // General
@@ -103,9 +104,12 @@ export function SystemAdministration({ networkAssistantEnabled = false, onToggle
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('preferences');
   const [apiNotAvailable, setApiNotAvailable] = useState(false);
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [loadingSystemInfo, setLoadingSystemInfo] = useState(false);
 
   useEffect(() => {
     loadSystemConfig();
+    loadSystemInfo();
   }, []);
 
   const loadSystemConfig = async () => {
@@ -129,6 +133,30 @@ export function SystemAdministration({ networkAssistantEnabled = false, onToggle
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSystemInfo = async () => {
+    setLoadingSystemInfo(true);
+    try {
+      const response = await apiService.makeAuthenticatedRequest('/v1/system/info', {}, 8000);
+      if (response.ok) {
+        const data = await response.json();
+        setSystemInfo(data);
+      }
+    } catch (error) {
+      console.warn('System info not available:', error);
+    } finally {
+      setLoadingSystemInfo(false);
+    }
+  };
+
+  const formatUptime = (seconds: number): string => {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
   };
 
   const handleSaveConfig = async () => {
@@ -176,9 +204,11 @@ export function SystemAdministration({ networkAssistantEnabled = false, onToggle
 
   if (loading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading system administration...</span>
+        </div>
       </div>
     );
   }
@@ -209,6 +239,75 @@ export function SystemAdministration({ networkAssistantEnabled = false, onToggle
             This feature requires API v1/system/config support.
           </AlertDescription>
         </Alert>
+      )}
+
+      {systemInfo && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5" />
+              System Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <Label className="text-muted-foreground">Hostname</Label>
+                <p className="font-medium">{systemInfo.hostname}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Model</Label>
+                <p className="font-medium">{systemInfo.model}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Version</Label>
+                <p className="font-medium">{systemInfo.softwareVersion}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Uptime</Label>
+                <p className="font-medium">{formatUptime(systemInfo.uptime)}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 mt-4">
+              <div>
+                <Label className="text-muted-foreground">CPU Usage</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all" 
+                      style={{ width: `${systemInfo.cpuUsage}%` }} 
+                    />
+                  </div>
+                  <span className="text-sm">{systemInfo.cpuUsage}%</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Memory</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all" 
+                      style={{ width: `${systemInfo.memoryUsage}%` }} 
+                    />
+                  </div>
+                  <span className="text-sm">{systemInfo.memoryUsage}%</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Disk</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all" 
+                      style={{ width: `${systemInfo.diskUsage}%` }} 
+                    />
+                  </div>
+                  <span className="text-sm">{systemInfo.diskUsage}%</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

@@ -11,19 +11,69 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Campus Controller URL
-const CAMPUS_CONTROLLER_URL = process.env.CAMPUS_CONTROLLER_URL || 'https://tsophiea.ddns.net';
+// Default Campus Controller URL (fallback if no dynamic controller specified)
+const DEFAULT_CONTROLLER_URL = process.env.CAMPUS_CONTROLLER_URL || 'https://tsophiea.ddns.net';
+
+// Map to track active controller URLs per session (could be enhanced with Redis for production)
+const controllerSessions = new Map();
 
 console.log('[Proxy Server] Starting...');
-console.log('[Proxy Server] Target:', CAMPUS_CONTROLLER_URL);
+console.log('[Proxy Server] Default Target:', DEFAULT_CONTROLLER_URL);
 console.log('[Proxy Server] Port:', PORT);
+console.log('[Proxy Server] Multi-controller support: ENABLED');
+
+// Runtime environment validation
+console.log('[Proxy Server] --- Runtime Environment ---');
+if (!process.env.CAMPUS_CONTROLLER_URL) {
+  console.warn('[Proxy Server] ⚠  CAMPUS_CONTROLLER_URL not set — using hardcoded default (tsophiea.ddns.net)');
+}
+if (!process.env.ALLOWED_ORIGINS) {
+  console.warn('[Proxy Server] ⚠  ALLOWED_ORIGINS not set — CORS will allow all origins (set this in production!)');
+} else {
+  console.log('[Proxy Server] ✓ ALLOWED_ORIGINS:', process.env.ALLOWED_ORIGINS);
+}
+console.log('[Proxy Server] --------------------------');
 
 // Enable CORS for all routes
+// ALLOWED_ORIGINS: comma-separated list of permitted origins (e.g. https://aura.example.com)
+// In development, localhost on any port is always permitted.
+const rawAllowedOrigins = process.env.ALLOWED_ORIGINS || '';
+const configuredOrigins = rawAllowedOrigins
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: true, // Allow all origins in development, restrict in production
+  origin: (origin, callback) => {
+    // Server-to-server requests (no Origin header) — allow
+    if (!origin) return callback(null, true);
+
+    // If ALLOWED_ORIGINS is not configured, fall back to allowing all origins.
+    // This handles same-origin "crossorigin" asset requests (Vite adds crossorigin
+    // to <script type="module"> and <link rel="modulepreload"> tags, which causes
+    // the browser to send an Origin header even for same-origin requests).
+    if (configuredOrigins.length === 0) {
+      return callback(null, true);
+    }
+
+    // Always allow localhost in development
+    if (process.env.NODE_ENV !== 'production') {
+      if (/^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+          /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+        return callback(null, true);
+      }
+    }
+
+    // Allow explicitly configured origins
+    if (configuredOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Controller-URL']
 }));
 
 // Health check endpoint
@@ -33,23 +83,48 @@ app.get('/health', (req, res) => {
 
 // Version check endpoint - proves which commit is deployed
 app.get('/api/version', async (req, res) => {
-  try {
-    // Try to read version.json from build directory
-    const versionPath = path.join(__dirname, 'build', 'version.json');
-    const fs = await import('fs');
-    const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
-    res.json(versionData);
-  } catch (error) {
-    // Fallback if version.json doesn't exist
-    res.json({
-      version: 'unknown',
-      commit: 'unknown',
-      error: 'version.json not found in build',
-      errorDetails: error.message,
-      buildPath: path.join(__dirname, 'build'),
-      timestamp: new Date().toISOString()
-    });
+  const fs = await import('fs');
+
+  // Try build/version.json first (written by generate-version.js during build)
+  for (const versionPath of [
+    path.join(__dirname, 'build', 'version.json'),
+    path.join(__dirname, 'public', 'version.json'),
+  ]) {
+    try {
+      const versionData = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+      // If version.json has real data (not fallback unknowns), use it
+      if (versionData.commit && versionData.commit !== 'unknown') {
+        res.json(versionData);
+        return;
+      }
+    } catch (_) {
+      // continue to next path
+    }
   }
+
+  // Final fallback: use Railway runtime env vars if available
+  const railwayCommit = process.env.RAILWAY_GIT_COMMIT_SHA || '';
+  const railwayBranch = process.env.RAILWAY_GIT_BRANCH || 'unknown';
+  const commitShort = railwayCommit.length >= 7 ? railwayCommit.substring(0, 7) : null;
+
+  if (commitShort) {
+    res.json({
+      version: `v0.${commitShort}`,
+      commit: commitShort,
+      commitFull: railwayCommit,
+      branch: railwayBranch,
+      buildDate: new Date().toISOString(),
+      message: 'Deployed via Railway (runtime env)',
+    });
+    return;
+  }
+
+  res.json({
+    version: 'unknown',
+    commit: 'unknown',
+    error: 'version.json not found; RAILWAY_GIT_COMMIT_SHA not set',
+    buildDate: new Date().toISOString(),
+  });
 });
 
 // JSON body parser - only applied to server-side routes, NOT globally
@@ -903,9 +978,33 @@ app.get('/api/oui/lookup', (req, res) => {
   res.json({ vendor, oui, mac: String(mac) });
 });
 
-// Proxy configuration
+// Helper function to get controller URL from request
+function getControllerUrl(req) {
+  // Check for X-Controller-URL header (set by frontend when using dynamic controllers)
+  const controllerHeader = req.headers['x-controller-url'];
+  if (controllerHeader) {
+    // Validate URL format to prevent SSRF
+    try {
+      const url = new URL(controllerHeader);
+      if (url.protocol === 'https:' || url.protocol === 'http:') {
+        return controllerHeader;
+      }
+    } catch (e) {
+      console.warn('[Proxy] Invalid controller URL in header:', controllerHeader);
+    }
+  }
+  return DEFAULT_CONTROLLER_URL;
+}
+
+// Dynamic proxy middleware using http-proxy-middleware router option
 const proxyOptions = {
-  target: CAMPUS_CONTROLLER_URL,
+  router: (req) => {
+    const target = getControllerUrl(req);
+    if (target !== DEFAULT_CONTROLLER_URL) {
+      console.log(`[Proxy] Dynamic routing to: ${target}`);
+    }
+    return target;
+  },
   changeOrigin: true,
   secure: false, // Accept self-signed certificates
   followRedirects: true,
@@ -927,14 +1026,17 @@ const proxyOptions = {
   },
 
   onProxyReq: (proxyReq, req, res) => {
-    // Log all proxied requests
-    const targetUrl = `${CAMPUS_CONTROLLER_URL}${req.url}`;
-    console.log(`[Proxy] ${req.method} ${req.url} -> ${targetUrl}`);
+    // Get target URL for logging
+    const targetUrl = getControllerUrl(req);
+    console.log(`[Proxy] ${req.method} ${req.url} -> ${targetUrl}${req.url}`);
 
     // Forward original headers
     if (req.headers.authorization) {
       proxyReq.setHeader('Authorization', req.headers.authorization);
     }
+    
+    // Remove the x-controller-url header before forwarding (internal use only)
+    proxyReq.removeHeader('x-controller-url');
   },
 
   onProxyRes: (proxyRes, req, res) => {
@@ -956,10 +1058,11 @@ const proxyOptions = {
   }
 };
 
-// Proxy all /api/* requests to Campus Controller
-console.log('[Proxy Server] Setting up /api/* proxy middleware');
+// Proxy all /api/* requests to Campus Controller (with dynamic routing support)
+console.log('[Proxy Server] Setting up /api/* proxy middleware with dynamic routing');
 app.use('/api', (req, res, next) => {
-  console.log(`[Proxy Middleware] Received: ${req.method} ${req.url}`);
+  const target = getControllerUrl(req);
+  console.log(`[Proxy Middleware] Received: ${req.method} ${req.url} (target: ${target})`);
   next();
 }, createProxyMiddleware(proxyOptions));
 
@@ -1003,7 +1106,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Proxy Server] Running on port ${PORT}`);
-  console.log(`[Proxy Server] Proxying /api/* to ${CAMPUS_CONTROLLER_URL}`);
+  console.log(`[Proxy Server] Proxying /api/* to ${DEFAULT_CONTROLLER_URL} (with dynamic routing)`);
   console.log(`[Proxy Server] Health check available at http://localhost:${PORT}/health`);
 });
 

@@ -25,8 +25,13 @@ function getVersionInfo() {
 const { version, cacheVersion } = getVersionInfo();
 console.log(`Building with APP_VERSION=${version}, CACHE_VERSION=${cacheVersion}`);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  // Strip console.* calls and debugger statements in production builds only.
+  // This removes all 500+ raw console.log calls without touching source files.
+  esbuild: {
+    drop: mode === 'production' ? (['console', 'debugger'] as ('console' | 'debugger')[]) : [],
+  },
   define: {
     // Inject version constants at build time
     __APP_VERSION__: JSON.stringify(version),
@@ -86,33 +91,37 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'build',
-    // Code splitting configuration to reduce bundle size
+    minify: 'esbuild',
     rollupOptions: {
       output: {
         manualChunks: {
-          // React core
           'vendor-react': ['react', 'react-dom', 'react-hook-form'],
-          // UI components
           'vendor-ui': [
             '@radix-ui/react-dialog',
             '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-select',
-            '@radix-ui/react-tabs'
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-popover',
           ],
-          // Charts
-          'vendor-charts': ['recharts'],
-          // Supabase
+          'vendor-charts': ['recharts', 'chart.js', 'react-chartjs-2'],
           'vendor-supabase': ['@supabase/supabase-js'],
-          // Icons
-          'vendor-icons': ['lucide-react']
-        }
-      }
+          'vendor-icons': ['lucide-react'],
+          // Feature-specific vendors — only loaded when the relevant section is used
+          'vendor-crypto': ['tweetnacl', 'tweetnacl-sealedbox-js'],
+          'vendor-carousel': ['embla-carousel-react'],
+          'vendor-qr': ['qrcode.react'],
+        },
+      },
+      treeshake: {
+        moduleSideEffects: 'no-external',
+        propertyReadSideEffects: false,
+      },
     },
-    // Increase chunk size warning limit
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 500,
   },
   server: {
     port: 3000,
     open: true,
   },
-});
+}));

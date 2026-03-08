@@ -6,17 +6,19 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Alert, AlertDescription } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { Skeleton } from './ui/skeleton';
+
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
 import { WLANAssignmentService } from '../services/wlanAssignment';
 import { effectiveSetCalculator } from '../services/effectiveSetCalculator';
 import { DeploymentModeSelector } from './wlans/DeploymentModeSelector';
-import { ProfilePicker } from './wlans/ProfilePicker';
+import { ProfilePickerDialog } from './wlans/ProfilePickerDialog';
 import { EffectiveSetPreview } from './wlans/EffectiveSetPreview';
 import { SiteGroupManagementDialog } from './SiteGroupManagementDialog';
+import { ProfileInterfaceAssignmentDialog, type ProfileWithInterfaces } from './wlans/ProfileInterfaceAssignmentDialog';
 import type {
   Site,
   SiteGroup,
@@ -24,7 +26,9 @@ import type {
   AutoAssignmentResponse,
   WLANFormData,
   DeploymentMode,
-  EffectiveProfileSet
+  EffectiveProfileSet,
+  SecurityType,
+  PMFMode
 } from '../types/network';
 
 interface CreateWLANDialogProps {
@@ -43,10 +47,10 @@ interface SiteDeploymentConfig {
 }
 
 export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDialogProps) {
-  // Form state
+  // Form state - defaults for easy WLAN creation
   const [formData, setFormData] = useState<WLANFormData>({
-    serviceName: '',
-    ssid: '',
+    serviceName: 'New WLAN',
+    ssid: 'New WLAN',
     security: 'wpa2-psk',
     passphrase: '',
     vlan: 1,
@@ -55,10 +59,27 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
     selectedSites: [],
     selectedSiteGroups: [],
     authenticatedUserDefaultRoleID: null,
-    // Advanced options defaults
+    // Basic options
     hidden: false,
     maxClients: undefined,
-    description: ''
+    description: '',
+    // Advanced options (controller defaults)
+    mbo: true,
+    accountingEnabled: false,
+    includeHostname: false,
+    enable11mcSupport: false,
+    enabled11kSupport: false,
+    uapsdEnabled: true,
+    admissionControlVoice: false,
+    admissionControlVideo: false,
+    admissionControlBestEffort: false,
+    admissionControlBackgroundTraffic: false,
+    clientToClientCommunication: true,
+    purgeOnDisconnect: false,
+    beaconProtection: false,
+    preAuthenticatedIdleTimeout: 300,
+    postAuthenticatedIdleTimeout: 1800,
+    sessionTimeout: 0
   });
 
   // Sites data
@@ -72,6 +93,18 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
   // Roles
   const [roles, setRoles] = useState<any[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
+
+  // AAA Policies (for enterprise auth)
+  const [aaaPolicies, setAaaPolicies] = useState<any[]>([]);
+  const [loadingAaaPolicies, setLoadingAaaPolicies] = useState(false);
+
+  // Topologies
+  const [topologies, setTopologies] = useState<any[]>([]);
+  const [loadingTopologies, setLoadingTopologies] = useState(false);
+
+  // Class of Service
+  const [cosProfiles, setCosProfiles] = useState<any[]>([]);
+  const [loadingCos, setLoadingCos] = useState(false);
 
   // Site deployment configurations
   const [siteConfigs, setSiteConfigs] = useState<Map<string, SiteDeploymentConfig>>(new Map());
@@ -90,6 +123,9 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
   // Submission state
   const [submitting, setSubmitting] = useState(false);
 
+  // Track if SSID has been manually edited (to stop auto-sync from Network Name)
+  const [ssidManuallyEdited, setSsidManuallyEdited] = useState(false);
+
   // Draggable state
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -98,6 +134,14 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
 
   // Advanced options state
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Interface assignment dialog state (for granular radio/port selection)
+  const [interfaceAssignmentOpen, setInterfaceAssignmentOpen] = useState(false);
+  const [createdServiceId, setCreatedServiceId] = useState<string | null>(null);
+  const [createdServiceName, setCreatedServiceName] = useState<string>('');
+
+  // 6GHz band validation warning
+  const [show6GHzWarning, setShow6GHzWarning] = useState(false);
 
   // Load site groups from localStorage
   useEffect(() => {
@@ -111,27 +155,52 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
     }
   }, []);
 
-  // Load sites and roles when dialog opens
+  // Load sites, roles, and AAA policies when dialog opens
   useEffect(() => {
     if (open) {
       loadSites();
       loadRoles();
-      // Reset form and position
+      loadAaaPolicies();
+      loadTopologies();
+      loadCosProfiles();
+      // Reset form and position with easy-to-use defaults
       setFormData({
-        serviceName: '',
-        ssid: '',
+        serviceName: 'New WLAN',
+        ssid: 'New WLAN',
         security: 'wpa2-psk',
         passphrase: '',
-        vlan: null,
+        vlan: 1,
         band: 'dual',
         enabled: true,
-        selectedSites: [],
+        selectedSites: [], // Will be populated with all sites after load
         selectedSiteGroups: [],
-        authenticatedUserDefaultRoleID: null // Will be set to 'bridged' after roles load
+        authenticatedUserDefaultRoleID: null, // Will be set to 'bridged' after roles load
+        // Basic options
+        hidden: false,
+        maxClients: undefined,
+        description: '',
+        // Advanced options (controller defaults)
+        mbo: true,
+        accountingEnabled: false,
+        includeHostname: false,
+        enable11mcSupport: false,
+        enabled11kSupport: false,
+        uapsdEnabled: true,
+        admissionControlVoice: false,
+        admissionControlVideo: false,
+        admissionControlBestEffort: false,
+        admissionControlBackgroundTraffic: false,
+        clientToClientCommunication: true,
+        purgeOnDisconnect: false,
+        beaconProtection: false,
+        preAuthenticatedIdleTimeout: 300,
+        postAuthenticatedIdleTimeout: 1800,
+        sessionTimeout: 0
       });
       setSiteConfigs(new Map());
       setProfilesBySite(new Map());
       setEffectiveSets([]);
+      setSsidManuallyEdited(false); // Reset SSID sync tracking
       setPosition({ x: 0, y: 0 }); // Reset position when opening
     }
   }, [open]);
@@ -189,11 +258,38 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
     }
   }, [siteConfigs, profilesBySite]);
 
+  // Check for 6GHz band with non-WPA3/OWE security
+  useEffect(() => {
+    const bandLower = formData.band?.toLowerCase() || '';
+    const includes6GHz = bandLower.includes('6ghz') || 
+                         bandLower.includes('6 ghz') ||
+                         bandLower === 'all' || 
+                         bandLower.includes('tri');
+    
+    const validSecurityFor6GHz = [
+      'wpa3-personal',
+      'wpa3-enterprise-transition',
+      'wpa3-enterprise-192',
+      'owe',
+      'wpa3-compatibility'
+    ];
+    
+    const isSecurityValid = validSecurityFor6GHz.includes(formData.security);
+    
+    setShow6GHzWarning(includes6GHz && !isSecurityValid);
+  }, [formData.band, formData.security]);
+
   const loadSites = async () => {
     setLoadingSites(true);
     try {
       const data = await apiService.getSites();
       setSites(data);
+      // Auto-select all sites by default for easy deployment
+      if (data.length > 0) {
+        const allSiteIds = data.map((s: any) => s.id);
+        setFormData(prev => ({ ...prev, selectedSites: allSiteIds }));
+        console.log('[CreateWLAN] Auto-selected all sites:', allSiteIds.length);
+      }
     } catch (error) {
       console.error('Failed to load sites:', error);
       toast.error('Failed to load sites');
@@ -222,6 +318,45 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
       // Don't show error toast - roles are optional
     } finally {
       setLoadingRoles(false);
+    }
+  };
+
+  const loadAaaPolicies = async () => {
+    setLoadingAaaPolicies(true);
+    try {
+      const data = await apiService.getAAAPolicies();
+      setAaaPolicies(data);
+      console.log(`[CreateWLAN] Loaded ${data.length} AAA policies`);
+    } catch (error) {
+      console.error('Failed to load AAA policies:', error);
+    } finally {
+      setLoadingAaaPolicies(false);
+    }
+  };
+
+  const loadTopologies = async () => {
+    setLoadingTopologies(true);
+    try {
+      const data = await apiService.getTopologies();
+      setTopologies(data);
+      console.log(`[CreateWLAN] Loaded ${data.length} topologies`);
+    } catch (error) {
+      console.error('Failed to load topologies:', error);
+    } finally {
+      setLoadingTopologies(false);
+    }
+  };
+
+  const loadCosProfiles = async () => {
+    setLoadingCos(true);
+    try {
+      const data = await apiService.getClassOfService();
+      setCosProfiles(data);
+      console.log(`[CreateWLAN] Loaded ${data.length} CoS profiles`);
+    } catch (error) {
+      console.error('Failed to load CoS profiles:', error);
+    } finally {
+      setLoadingCos(false);
     }
   };
 
@@ -409,7 +544,11 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
     if (!formData.ssid?.trim()) return false;
     if (!formData.security) return false;
     if (!formData.band) return false;
-    if (formData.security !== 'open' && !formData.passphrase?.trim()) return false;
+    
+    // Passphrase required only for PSK/Personal modes
+    const pskModes: SecurityType[] = ['wpa2-psk', 'wpa3-personal', 'wpa3-compatibility'];
+    if (pskModes.includes(formData.security) && !formData.passphrase?.trim()) return false;
+    
     // At least one site or site group must be selected
     const expandedSites = getExpandedSiteIds();
     if (expandedSites.length === 0) return false;
@@ -443,8 +582,10 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
       errors.push('Band is required');
     }
 
-    if (formData.security !== 'open' && !formData.passphrase?.trim()) {
-      errors.push('Passphrase is required for secured networks');
+    // Passphrase required only for PSK/Personal modes
+    const pskModes: SecurityType[] = ['wpa2-psk', 'wpa3-personal', 'wpa3-compatibility'];
+    if (pskModes.includes(formData.security) && !formData.passphrase?.trim()) {
+      errors.push('Passphrase is required for WPA Personal networks');
     }
 
     const expandedSites = getExpandedSiteIds();
@@ -524,10 +665,31 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
           enabled: formData.enabled,
           sites: expandedSites, // Use expanded site IDs (includes both individual sites and sites from groups)
           authenticatedUserDefaultRoleID: formData.authenticatedUserDefaultRoleID || undefined,
-          // Advanced options
-          hidden: formData.hidden || undefined,
-          maxClients: formData.maxClients || undefined,
-          description: formData.description || undefined
+          // Security-specific configuration (enterprise auth, PMF, etc.)
+          securityConfig: formData.securityConfig,
+          // Basic options
+          hidden: formData.hidden,
+          maxClients: formData.maxClients,
+          description: formData.description || undefined,
+          // Advanced options (from controller form)
+          mbo: formData.mbo,
+          accountingEnabled: formData.accountingEnabled,
+          includeHostname: formData.includeHostname,
+          enable11mcSupport: formData.enable11mcSupport,
+          enabled11kSupport: formData.enabled11kSupport,
+          uapsdEnabled: formData.uapsdEnabled,
+          admissionControlVoice: formData.admissionControlVoice,
+          admissionControlVideo: formData.admissionControlVideo,
+          admissionControlBestEffort: formData.admissionControlBestEffort,
+          admissionControlBackgroundTraffic: formData.admissionControlBackgroundTraffic,
+          clientToClientCommunication: formData.clientToClientCommunication,
+          purgeOnDisconnect: formData.purgeOnDisconnect,
+          beaconProtection: formData.beaconProtection,
+          preAuthenticatedIdleTimeout: formData.preAuthenticatedIdleTimeout,
+          postAuthenticatedIdleTimeout: formData.postAuthenticatedIdleTimeout,
+          sessionTimeout: formData.sessionTimeout,
+          topologyId: formData.topologyId,
+          cosId: formData.cosId
         },
         siteAssignments
       );
@@ -535,9 +697,33 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
       console.log('11. WLAN Creation Result:', result);
       console.log('=== WLAN CREATION DEBUG END ===');
 
-      toast.success('WLAN Created Successfully', {
-        description: `Assigned to ${result.profilesAssigned} profile(s) across ${result.sitesProcessed} site(s)`
-      });
+      // Calculate success/failure counts
+      const successfulAssignments = result.assignments?.filter(a => a.success) || [];
+      const failedAssignments = result.assignments?.filter(a => !a.success) || [];
+
+      if (failedAssignments.length === 0) {
+        // Complete success
+        toast.success('WLAN Created Successfully', {
+          description: `Assigned to ${result.profilesAssigned} profile(s) across ${result.sitesProcessed} site(s)`
+        });
+      } else if (successfulAssignments.length > 0) {
+        // Partial success - some profiles succeeded, some failed
+        toast.warning('WLAN Created with Partial Deployment', {
+          description: `✓ ${successfulAssignments.length} profile(s) succeeded, ✗ ${failedAssignments.length} failed. Check console for details.`,
+          duration: 8000
+        });
+        console.warn('[WLAN Deployment] Failed profiles:', failedAssignments.map(a => ({
+          profile: a.profileName,
+          error: a.error
+        })));
+      } else {
+        // All assignments failed
+        toast.error('WLAN Created but Deployment Failed', {
+          description: `WLAN was created but could not be assigned to any profiles. Check console for details.`,
+          duration: 8000
+        });
+        console.error('[WLAN Deployment] All profile assignments failed:', failedAssignments);
+      }
 
       onSuccess(result);
       onOpenChange(false);
@@ -557,6 +743,85 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
     }
   };
 
+  // Handler for interface assignment dialog - assigns service to profiles with specific interfaces
+  const handleInterfaceAssignment = async (assignments: ProfileWithInterfaces[]) => {
+    if (!createdServiceId) {
+      toast.error('No service ID available for assignment');
+      return;
+    }
+
+    console.log('[InterfaceAssignment] Saving assignments for service:', createdServiceId);
+    console.log('[InterfaceAssignment] Profile assignments:', assignments);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const assignment of assignments) {
+      try {
+        // Build interface configuration from the assignment
+        const interfaces = {
+          radio1: assignment.interfaces.radio1?.enabled ?? false,
+          radio2: assignment.interfaces.radio2?.enabled ?? false,
+          radio3: assignment.interfaces.radio3?.enabled ?? false,
+          port1: assignment.interfaces.port1?.enabled ?? false,
+          port2: assignment.interfaces.port2?.enabled ?? false,
+          port3: assignment.interfaces.port3?.enabled ?? false,
+        };
+
+        await apiService.assignServiceToProfileWithInterfaces(
+          createdServiceId,
+          assignment.id,
+          interfaces
+        );
+        successCount++;
+      } catch (error) {
+        console.error(`[InterfaceAssignment] Failed to assign to profile ${assignment.name}:`, error);
+        failCount++;
+      }
+    }
+
+    if (failCount === 0) {
+      toast.success('Interface Assignments Saved', {
+        description: `Successfully configured ${successCount} profile(s)`
+      });
+    } else if (successCount > 0) {
+      toast.warning('Partial Assignment Success', {
+        description: `${successCount} succeeded, ${failCount} failed`
+      });
+    } else {
+      toast.error('Assignment Failed', {
+        description: 'Could not assign interfaces to any profiles'
+      });
+    }
+
+    // Trigger sync for assigned profiles
+    try {
+      const profileIds = assignments.map(a => a.id);
+      await apiService.syncMultipleProfiles(profileIds);
+    } catch (error) {
+      console.warn('[InterfaceAssignment] Sync failed:', error);
+    }
+
+    // Close dialogs and notify success
+    setInterfaceAssignmentOpen(false);
+    setCreatedServiceId(null);
+    setCreatedServiceName('');
+    onOpenChange(false);
+
+    onSuccess({
+      serviceId: createdServiceId,
+      sitesProcessed: siteConfigs.size,
+      deviceGroupsFound: 0,
+      profilesAssigned: successCount,
+      assignments: assignments.map(a => ({
+        profileId: a.id,
+        profileName: a.name,
+        success: true
+      })),
+      success: true
+    });
+  };
+
   // Use the comprehensive validation function
   const isValid = isFormValid();
 
@@ -572,7 +837,7 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
             top: '50%',
             transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
             cursor: isDragging ? 'grabbing' : 'auto',
-            minWidth: '800px',
+            minWidth: 'min(95vw, 800px)',
             minHeight: '500px',
             maxHeight: '90vh'
           }}
@@ -600,21 +865,32 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
               </CardHeader>
               <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Service Name */}
+                {/* Network Name - auto-syncs to SSID unless SSID is manually edited */}
                 <div className="space-y-2">
                   <Label htmlFor="serviceName">
-                    Service Name {!formData.serviceName?.trim() && <span className="text-red-500">*</span>}
+                    Network Name {!formData.serviceName?.trim() && <span className="text-red-500">*</span>}
                   </Label>
                   <Input
                     id="serviceName"
                     value={formData.serviceName || ''}
-                    onChange={(e) => setFormData({ ...formData, serviceName: e.target.value })}
-                    placeholder="Service identifier (required)"
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      // Sync SSID unless user has manually edited it
+                      if (!ssidManuallyEdited) {
+                        setFormData({ ...formData, serviceName: newName, ssid: newName });
+                      } else {
+                        setFormData({ ...formData, serviceName: newName });
+                      }
+                    }}
+                    placeholder="e.g. Corporate WiFi"
                     className={!formData.serviceName?.trim() ? 'border-red-300 focus-visible:border-red-500' : ''}
                   />
+                  {!formData.serviceName?.trim() && (
+                    <p className="text-xs text-red-500">Network name is required</p>
+                  )}
                 </div>
 
-                {/* SSID */}
+                {/* SSID - can be different from Network Name */}
                 <div className="space-y-2">
                   <Label htmlFor="ssid">
                     SSID {!formData.ssid?.trim() && <span className="text-red-500">*</span>}
@@ -622,29 +898,40 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
                   <Input
                     id="ssid"
                     value={formData.ssid || ''}
-                    onChange={(e) => setFormData({ ...formData, ssid: e.target.value })}
-                    placeholder="MyNetwork (required)"
+                    onChange={(e) => {
+                      setSsidManuallyEdited(true); // User edited SSID, stop auto-sync
+                      setFormData({ ...formData, ssid: e.target.value });
+                    }}
+                    placeholder="Broadcast name (visible to clients)"
                     className={!formData.ssid?.trim() ? 'border-red-300 focus-visible:border-red-500' : ''}
                   />
+                  {!formData.ssid?.trim() && (
+                    <p className="text-xs text-red-500">SSID is required</p>
+                  )}
                 </div>
 
                 {/* Security Type */}
                 <div className="space-y-2">
                   <Label htmlFor="security">
-                    Security
+                    Auth Type
                   </Label>
                   <Select
                     value={formData.security}
-                    onValueChange={(value: any) => setFormData({ ...formData, security: value })}
+                    onValueChange={(value: any) => setFormData({ ...formData, security: value, securityConfig: undefined })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="open">Open (No Security)</SelectItem>
-                      <SelectItem value="wpa2-psk">WPA2-PSK</SelectItem>
-                      <SelectItem value="wpa3-sae">WPA3-SAE</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="owe">OWE (Enhanced Open)</SelectItem>
+                      <SelectItem value="wep">WEP (Legacy)</SelectItem>
+                      <SelectItem value="wpa2-psk">WPA2-Personal</SelectItem>
                       <SelectItem value="wpa2-enterprise">WPA2-Enterprise</SelectItem>
+                      <SelectItem value="wpa3-personal">WPA3-Personal</SelectItem>
+                      <SelectItem value="wpa3-compatibility">WPA3-Compatibility</SelectItem>
+                      <SelectItem value="wpa3-enterprise-transition">WPA3-Enterprise Transition</SelectItem>
+                      <SelectItem value="wpa3-enterprise-192">WPA3-Enterprise 192-bit</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -671,19 +958,96 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
                   </Select>
                 </div>
 
-                {/* Passphrase (conditional) */}
-                {formData.security !== 'open' && (
+                {/* 6GHz Security Warning */}
+                {show6GHzWarning && (
+                  <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-700 dark:text-amber-400">
+                      6GHz (Radio 3) requires WPA3 or OWE security. The controller may reject this configuration.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Passphrase - for PSK/Personal modes */}
+                {['wpa2-psk', 'wpa3-personal', 'wpa3-compatibility'].includes(formData.security) && (
                   <div className="space-y-2">
                     <Label htmlFor="passphrase">
-                      Passphrase {formData.security !== 'open' && !formData.passphrase?.trim() && <span className="text-red-500">*</span>}
+                      {formData.security === 'wpa3-personal' ? 'WPA3 Key' : 'WPA2 Key'} 
+                      {!formData.passphrase?.trim() && <span className="text-red-500">*</span>}
                     </Label>
                     <Input
                       id="passphrase"
                       type="password"
                       value={formData.passphrase || ''}
                       onChange={(e) => setFormData({ ...formData, passphrase: e.target.value })}
-                      placeholder="Enter passphrase (required)"
+                      placeholder="8–63 characters"
                       className={!formData.passphrase?.trim() ? 'border-red-300 focus-visible:border-red-500' : ''}
+                    />
+                    {!formData.passphrase?.trim() && (
+                      <p className="text-xs text-red-500">Passphrase is required (8–63 characters)</p>
+                    )}
+                  </div>
+                )}
+
+                {/* PMF Mode - for WPA2/WPA3 */}
+                {['wpa2-psk', 'wpa2-enterprise', 'wpa3-compatibility'].includes(formData.security) && (
+                  <div className="space-y-2">
+                    <Label htmlFor="pmfMode">Protected Management Frames</Label>
+                    <Select
+                      value={formData.securityConfig?.pmfMode || 'disabled'}
+                      onValueChange={(value: PMFMode) => setFormData({
+                        ...formData,
+                        securityConfig: { ...formData.securityConfig, pmfMode: value }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="disabled">Disabled</SelectItem>
+                        <SelectItem value="optional">Optional (Capable)</SelectItem>
+                        <SelectItem value="required">Required</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* WPA3 SAE Method - only for WPA3-Personal */}
+                {formData.security === 'wpa3-personal' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="saeMethod">SAE Method</Label>
+                    <Select
+                      value={formData.securityConfig?.saeMethod || 'both'}
+                      onValueChange={(value: any) => setFormData({
+                        ...formData,
+                        securityConfig: { ...formData.securityConfig, saeMethod: value }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sae">SAE Only (2.4/5 GHz)</SelectItem>
+                        <SelectItem value="h2e">H2E Only (Required for 6 GHz)</SelectItem>
+                        <SelectItem value="both">SAE/H2E (Default, backwards compatible)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* 6E WPA Compliance - for WPA3/OWE */}
+                {['owe', 'wpa3-personal', 'wpa3-enterprise-transition'].includes(formData.security) && (
+                  <div className="flex items-center justify-between py-2">
+                    <Label htmlFor="sixECompliance" className="cursor-pointer">6E WPA Compliance</Label>
+                    <input
+                      id="sixECompliance"
+                      type="checkbox"
+                      checked={formData.securityConfig?.sixECompliance ?? false}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        securityConfig: { ...formData.securityConfig, sixECompliance: e.target.checked }
+                      })}
+                      className="h-4 w-4 cursor-pointer"
                     />
                   </div>
                 )}
@@ -700,6 +1064,48 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
                     min="1"
                     max="4094"
                   />
+                </div>
+
+                {/* Topology */}
+                <div className="space-y-2">
+                  <Label htmlFor="topology">Topology</Label>
+                  <Select
+                    value={formData.topologyId || 'none'}
+                    onValueChange={(value) => setFormData({ ...formData, topologyId: value === 'none' ? undefined : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingTopologies ? "Loading topologies..." : "Select topology..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Default Topology</SelectItem>
+                      {topologies.map((topology) => (
+                        <SelectItem key={topology.id} value={topology.id}>
+                          {topology.name || topology.topologyName || topology.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Class of Service */}
+                <div className="space-y-2">
+                  <Label htmlFor="cos">Class of Service</Label>
+                  <Select
+                    value={formData.cosId || 'none'}
+                    onValueChange={(value) => setFormData({ ...formData, cosId: value === 'none' ? undefined : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingCos ? "Loading CoS..." : "Select CoS..."} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Default CoS</SelectItem>
+                      {cosProfiles.map((cos) => (
+                        <SelectItem key={cos.id} value={cos.id}>
+                          {cos.name || cos.cosName || cos.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Role */}
@@ -726,6 +1132,163 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
               </CardContent>
             </Card>
 
+            {/* Enterprise Authentication Section - Only for enterprise modes */}
+            {['wpa2-enterprise', 'wpa3-enterprise-transition', 'wpa3-enterprise-192'].includes(formData.security) && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Enterprise Authentication</CardTitle>
+                  <CardDescription className="text-xs">
+                    RADIUS/802.1X configuration
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Enable MBA */}
+                    <div className="flex items-center justify-between py-2 md:col-span-2">
+                      <Label htmlFor="mbaEnabled" className="cursor-pointer">MAC-Based Authentication (MBA)</Label>
+                      <input
+                        id="mbaEnabled"
+                        type="checkbox"
+                        checked={formData.securityConfig?.mbaEnabled ?? false}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, mbaEnabled: e.target.checked }
+                        })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* AAA Policy Selection */}
+                    <div className="space-y-2">
+                      <Label htmlFor="aaaPolicyId">AAA Policy</Label>
+                      <Select
+                        value={formData.securityConfig?.aaaPolicyId || 'none'}
+                        onValueChange={(value) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, aaaPolicyId: value === 'none' ? undefined : value }
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={loadingAaaPolicies ? "Loading policies..." : "Select AAA Policy..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None (Use WLAN-level RADIUS)</SelectItem>
+                          {aaaPolicies.map((policy) => (
+                            <SelectItem key={policy.id} value={policy.id}>
+                              {policy.name || policy.policyName || policy.id}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Authentication Method */}
+                    <div className="space-y-2">
+                      <Label htmlFor="wlanAuthMethod">Authentication Method</Label>
+                      <Select
+                        value={formData.securityConfig?.wlanAuthMethod || 'RADIUS'}
+                        onValueChange={(value: any) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, wlanAuthMethod: value }
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="RADIUS">RADIUS</SelectItem>
+                          <SelectItem value="Proxy RADIUS">Proxy RADIUS</SelectItem>
+                          <SelectItem value="Local">Local</SelectItem>
+                          <SelectItem value="LDAP">LDAP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Primary RADIUS Server */}
+                    <div className="space-y-2">
+                      <Label htmlFor="primaryRadius">Primary RADIUS Server</Label>
+                      <Input
+                        id="primaryRadius"
+                        value={formData.securityConfig?.primaryRadiusServer || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, primaryRadiusServer: e.target.value }
+                        })}
+                        placeholder="IP address or hostname"
+                      />
+                    </div>
+
+                    {/* Backup RADIUS Server */}
+                    <div className="space-y-2">
+                      <Label htmlFor="backupRadius">Backup RADIUS Server</Label>
+                      <Input
+                        id="backupRadius"
+                        value={formData.securityConfig?.backupRadiusServer || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, backupRadiusServer: e.target.value }
+                        })}
+                        placeholder="IP address or hostname (optional)"
+                      />
+                    </div>
+
+                    {/* Fast Transition */}
+                    <div className="flex items-center justify-between py-2 md:col-span-2">
+                      <Label htmlFor="fastTransition" className="cursor-pointer">Fast Transition (802.11r)</Label>
+                      <input
+                        id="fastTransition"
+                        type="checkbox"
+                        checked={formData.securityConfig?.fastTransition ?? false}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, fastTransition: e.target.checked }
+                        })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Default Auth Role */}
+                    <div className="space-y-2">
+                      <Label htmlFor="defaultAuthRole">Default Auth Role</Label>
+                      <Select
+                        value={formData.securityConfig?.defaultAuthRoleId || 'none'}
+                        onValueChange={(value) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, defaultAuthRoleId: value === 'none' ? undefined : value }
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select role..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {roles.map((role) => (
+                            <SelectItem key={role.id} value={role.id}>
+                              {role.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Default VLAN */}
+                    <div className="space-y-2">
+                      <Label htmlFor="defaultVlan">Default VLAN</Label>
+                      <Input
+                        id="defaultVlan"
+                        value={formData.securityConfig?.defaultVlanId || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          securityConfig: { ...formData.securityConfig, defaultVlanId: e.target.value }
+                        })}
+                        placeholder="VLAN ID (optional)"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Advanced Options Section */}
             <Card>
               <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowAdvanced(!showAdvanced)}>
@@ -739,46 +1302,249 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
                 <CardDescription className="text-xs mt-0.5">Optional advanced settings</CardDescription>
               </CardHeader>
               {showAdvanced && (
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Hide SSID */}
-                    <div className="flex items-center justify-between">
+                <CardContent className="space-y-6">
+                  {/* Toggle Options - Grid Layout */}
+                  <div className="space-y-3">
+                    {/* MultiBand Operation */}
+                    <div className="flex items-center justify-between py-1">
                       <div className="flex items-center gap-2">
-                        <Label htmlFor="hideSSID" className="cursor-pointer">Hide SSID</Label>
+                        <Label htmlFor="mbo" className="cursor-pointer">MultiBand Operation</Label>
+                        <Info className="h-3 w-3 text-muted-foreground" />
                       </div>
+                      <input
+                        id="mbo"
+                        type="checkbox"
+                        checked={formData.mbo ?? true}
+                        onChange={(e) => setFormData({ ...formData, mbo: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* RADIUS Accounting */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="accountingEnabled" className="cursor-pointer">RADIUS Accounting</Label>
+                      <input
+                        id="accountingEnabled"
+                        type="checkbox"
+                        checked={formData.accountingEnabled ?? false}
+                        onChange={(e) => setFormData({ ...formData, accountingEnabled: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Hide SSID */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="hideSSID" className="cursor-pointer">Hide SSID</Label>
                       <input
                         id="hideSSID"
                         type="checkbox"
-                        checked={formData.hidden || false}
+                        checked={formData.hidden ?? false}
                         onChange={(e) => setFormData({ ...formData, hidden: e.target.checked })}
                         className="h-4 w-4 cursor-pointer"
                       />
                     </div>
 
-                    {/* Max Clients */}
-                    <div className="space-y-2">
-                      <Label htmlFor="maxClients">Max Clients (Optional)</Label>
-                      <Input
-                        id="maxClients"
-                        type="number"
-                        value={formData.maxClients || ''}
-                        onChange={(e) => setFormData({ ...formData, maxClients: e.target.value ? parseInt(e.target.value) : undefined })}
-                        placeholder="Unlimited"
-                        min="1"
-                        max="1000"
+                    {/* Include Hostname */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="includeHostname" className="cursor-pointer">Include Hostname</Label>
+                      <input
+                        id="includeHostname"
+                        type="checkbox"
+                        checked={formData.includeHostname ?? false}
+                        onChange={(e) => setFormData({ ...formData, includeHostname: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
                       />
                     </div>
 
-                    {/* Description */}
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Description (Optional)</Label>
-                      <Input
-                        id="description"
-                        value={formData.description || ''}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Network description..."
+                    {/* FTM (11mc) responder support */}
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="enable11mcSupport" className="cursor-pointer">FTM (11mc) responder support</Label>
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                      <input
+                        id="enable11mcSupport"
+                        type="checkbox"
+                        checked={formData.enable11mcSupport ?? false}
+                        onChange={(e) => setFormData({ ...formData, enable11mcSupport: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
                       />
                     </div>
+
+                    {/* Radio Management (11k) support */}
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="enabled11kSupport" className="cursor-pointer">Radio Management (11k) support</Label>
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                      <input
+                        id="enabled11kSupport"
+                        type="checkbox"
+                        checked={formData.enabled11kSupport ?? false}
+                        onChange={(e) => setFormData({ ...formData, enabled11kSupport: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* U-APSD (WMM-PS) */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="uapsdEnabled" className="cursor-pointer">U-APSD (WMM-PS)</Label>
+                      <input
+                        id="uapsdEnabled"
+                        type="checkbox"
+                        checked={formData.uapsdEnabled ?? true}
+                        onChange={(e) => setFormData({ ...formData, uapsdEnabled: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Admission Control for Voice */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="admissionControlVoice" className="cursor-pointer">Use Admission Control for Voice (VO)</Label>
+                      <input
+                        id="admissionControlVoice"
+                        type="checkbox"
+                        checked={formData.admissionControlVoice ?? false}
+                        onChange={(e) => setFormData({ ...formData, admissionControlVoice: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Admission Control for Video */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="admissionControlVideo" className="cursor-pointer">Use Admission Control for Video (VI)</Label>
+                      <input
+                        id="admissionControlVideo"
+                        type="checkbox"
+                        checked={formData.admissionControlVideo ?? false}
+                        onChange={(e) => setFormData({ ...formData, admissionControlVideo: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Admission Control for Best Effort */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="admissionControlBestEffort" className="cursor-pointer">Use Admission Control for Best Effort (BE)</Label>
+                      <input
+                        id="admissionControlBestEffort"
+                        type="checkbox"
+                        checked={formData.admissionControlBestEffort ?? false}
+                        onChange={(e) => setFormData({ ...formData, admissionControlBestEffort: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Admission Control for Background */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="admissionControlBackgroundTraffic" className="cursor-pointer">Use Global Admission Control for Background (BK)</Label>
+                      <input
+                        id="admissionControlBackgroundTraffic"
+                        type="checkbox"
+                        checked={formData.admissionControlBackgroundTraffic ?? false}
+                        onChange={(e) => setFormData({ ...formData, admissionControlBackgroundTraffic: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Client To Client Communication */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="clientToClientCommunication" className="cursor-pointer">Client To Client Communication</Label>
+                      <input
+                        id="clientToClientCommunication"
+                        type="checkbox"
+                        checked={formData.clientToClientCommunication ?? true}
+                        onChange={(e) => setFormData({ ...formData, clientToClientCommunication: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Clear Session on Disconnect */}
+                    <div className="flex items-center justify-between py-1">
+                      <Label htmlFor="purgeOnDisconnect" className="cursor-pointer">Clear Session on Disconnect</Label>
+                      <input
+                        id="purgeOnDisconnect"
+                        type="checkbox"
+                        checked={formData.purgeOnDisconnect ?? false}
+                        onChange={(e) => setFormData({ ...formData, purgeOnDisconnect: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+
+                    {/* Beacon Protection */}
+                    <div className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="beaconProtection" className="cursor-pointer">Beacon Protection</Label>
+                        <Info className="h-3 w-3 text-muted-foreground" />
+                      </div>
+                      <input
+                        id="beaconProtection"
+                        type="checkbox"
+                        checked={formData.beaconProtection ?? false}
+                        onChange={(e) => setFormData({ ...formData, beaconProtection: e.target.checked })}
+                        className="h-4 w-4 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Timeout Settings */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-medium">Timeout Settings</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Pre-Authenticated Idle Timeout */}
+                      <div className="space-y-2">
+                        <Label htmlFor="preAuthenticatedIdleTimeout" className="text-xs">Pre-Authenticated idle timeout (seconds)</Label>
+                        <Input
+                          id="preAuthenticatedIdleTimeout"
+                          type="number"
+                          value={formData.preAuthenticatedIdleTimeout ?? 300}
+                          onChange={(e) => setFormData({ ...formData, preAuthenticatedIdleTimeout: parseInt(e.target.value) || 300 })}
+                          min="5"
+                          max="999999"
+                        />
+                      </div>
+
+                      {/* Post-Authenticated Idle Timeout */}
+                      <div className="space-y-2">
+                        <Label htmlFor="postAuthenticatedIdleTimeout" className="text-xs">Post-Authenticated idle timeout (seconds)</Label>
+                        <Input
+                          id="postAuthenticatedIdleTimeout"
+                          type="number"
+                          value={formData.postAuthenticatedIdleTimeout ?? 1800}
+                          onChange={(e) => setFormData({ ...formData, postAuthenticatedIdleTimeout: parseInt(e.target.value) || 1800 })}
+                          min="0"
+                          max="999999"
+                        />
+                      </div>
+
+                      {/* Maximum Session Duration */}
+                      <div className="space-y-2">
+                        <Label htmlFor="sessionTimeout" className="text-xs">Maximum session duration (seconds)</Label>
+                        <Input
+                          id="sessionTimeout"
+                          type="number"
+                          value={formData.sessionTimeout ?? 0}
+                          onChange={(e) => setFormData({ ...formData, sessionTimeout: parseInt(e.target.value) || 0 })}
+                          min="0"
+                          max="999999"
+                          placeholder="0 = unlimited"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (Optional)</Label>
+                    <Input
+                      id="description"
+                      value={formData.description || ''}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Network description..."
+                    />
                   </div>
                 </CardContent>
               )}
@@ -905,8 +1671,11 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
                   )}
                 </div>
                 {loadingSites ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+                  <div className="flex items-center justify-center h-32">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Loading...</span>
+                    </div>
                   </div>
                 ) : sites.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
@@ -1001,7 +1770,7 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
 
       {/* Profile Picker Dialog */}
       {profilePickerSite && (
-        <ProfilePicker
+        <ProfilePickerDialog
           open={profilePickerOpen}
           onOpenChange={setProfilePickerOpen}
           mode={profilePickerSite.mode}
@@ -1024,6 +1793,24 @@ export function CreateWLANDialog({ open, onOpenChange, onSuccess }: CreateWLANDi
         siteGroups={siteGroups}
         onSave={handleSaveSiteGroups}
       />
+
+      {/* Profile Interface Assignment Dialog - for granular radio/port selection */}
+      {createdServiceId && (
+        <ProfileInterfaceAssignmentDialog
+          open={interfaceAssignmentOpen}
+          onOpenChange={(open) => {
+            setInterfaceAssignmentOpen(open);
+            if (!open) {
+              // User cancelled - clear state
+              setCreatedServiceId(null);
+              setCreatedServiceName('');
+            }
+          }}
+          serviceId={createdServiceId}
+          serviceName={createdServiceName}
+          onSave={handleInterfaceAssignment}
+        />
+      )}
     </>
   );
 }
