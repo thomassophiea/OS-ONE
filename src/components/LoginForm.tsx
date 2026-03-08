@@ -48,10 +48,16 @@ export function LoginForm({ onLoginSuccess }: LoginFormProps) {
         return;
       }
 
-      // Store XIQ token — apiService.isAuthenticated() checks this key
-      localStorage.setItem('access_token', json.access_token);
+      // Store XIQ token for cloud API calls
+      localStorage.setItem('xiq_access_token', json.xiq_access_token);
       localStorage.setItem('xiq_region', region);
       localStorage.setItem('user_email', username);
+
+      // Store controller token as access_token — this is what api.ts uses for
+      // all /api/management/* calls. Fall back to XIQ token if unavailable
+      // (controller creds not configured), so the app still loads.
+      const controllerToken = json.controller_token || json.xiq_access_token;
+      localStorage.setItem('access_token', controllerToken);
 
       onLoginSuccess();
     } catch {

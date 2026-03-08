@@ -1058,10 +1058,13 @@ const proxyOptions = {
     const targetUrl = getControllerUrl(req);
     console.log(`[Proxy] ${req.method} ${req.url} -> ${targetUrl}${req.url}`);
 
-    // Inject the campus controller service-account token (pre-fetched by middleware).
-    // This replaces any XIQ token the browser may have sent — the controller only
-    // accepts its own OAuth2 tokens.
-    if (req._controllerToken) {
+    // Forward the browser's Authorization header.
+    // After XIQ login the browser holds a campus controller token (fetched by
+    // authRoutes on login), so this is always the right credential for /api/*.
+    // Server-side _controllerToken is a fallback in case the browser token is absent.
+    if (req.headers.authorization) {
+      proxyReq.setHeader('Authorization', req.headers.authorization);
+    } else if (req._controllerToken) {
       proxyReq.setHeader('Authorization', `Bearer ${req._controllerToken}`);
     }
 

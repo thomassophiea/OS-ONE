@@ -10,6 +10,7 @@
 
 import express from 'express';
 import { logger } from './redactLogger.js';
+import { getToken as getControllerToken, invalidateToken } from './tokenService.js';
 
 const PREFIX = 'AuthRoutes';
 const router = express.Router();
@@ -60,9 +61,24 @@ router.post('/xiq-login', async (req, res) => {
     }
 
     logger.info(PREFIX, `XIQ login successful for ${username}`);
+
+    // Also fetch a Campus Controller token via Inlets so the browser can use it
+    // for /api/management/* calls. If this fails we still return the XIQ token
+    // and let the frontend decide how to handle controller auth.
+    let controllerToken = null;
+    try {
+      invalidateToken(); // force fresh token for new session
+      controllerToken = await getControllerToken();
+      logger.info(PREFIX, 'Controller token acquired alongside XIQ login');
+    } catch (err) {
+      logger.warn(PREFIX, `Could not fetch controller token: ${err.message}`);
+    }
+
     res.json({
-      access_token: json.access_token,
-      token_type: json.token_type || 'Bearer',
+      xiq_access_token: json.access_token,
+      xiq_token_type: json.token_type || 'Bearer',
+      // controller_token is what api.ts should store as access_token
+      controller_token: controllerToken,
     });
   } catch (err) {
     logger.error(PREFIX, `XIQ login error: ${err.message}`);
