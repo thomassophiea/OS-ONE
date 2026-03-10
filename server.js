@@ -5,16 +5,6 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// ── XIQ + Inlets integration ──────────────────────────────────────────────────
-import cloudRouter from './server/cloudRoutes.js';
-import controllerRouter from './server/controllerRoutes.js';
-import authRouter from './server/authRoutes.js';
-import { xiqHealthCheck } from './server/xiqClient.js';
-import { controllerHealthCheck } from './server/controllerClient.js';
-import { getToken as getControllerToken } from './server/tokenService.js';
-// Config validation runs on import (logs warnings for missing vars)
-import './server/config.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -86,27 +76,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Controller-URL']
 }));
 
-// Health check endpoint — includes XIQ + Inlets connectivity status
-app.get('/health', async (req, res) => {
-  const base = { status: 'ok', timestamp: new Date().toISOString() };
-
-  // Fast path: skip upstream probes unless ?deep=true
-  if (req.query.deep !== 'true') {
-    return res.json(base);
-  }
-
-  const [xiq, controller] = await Promise.allSettled([
-    xiqHealthCheck(),
-    controllerHealthCheck(),
-  ]);
-
-  res.json({
-    ...base,
-    integrations: {
-      xiq: xiq.status === 'fulfilled' ? xiq.value : { reachable: false, error: xiq.reason?.message },
-      controller: controller.status === 'fulfilled' ? controller.value : { reachable: false, error: controller.reason?.message },
-    },
-  });
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Version check endpoint - proves which commit is deployed
@@ -1058,16 +1030,11 @@ const proxyOptions = {
     const targetUrl = getControllerUrl(req);
     console.log(`[Proxy] ${req.method} ${req.url} -> ${targetUrl}${req.url}`);
 
-    // Forward the browser's Authorization header.
-    // After XIQ login the browser holds a campus controller token (fetched by
-    // authRoutes on login), so this is always the right credential for /api/*.
-    // Server-side _controllerToken is a fallback in case the browser token is absent.
+    // Forward original headers
     if (req.headers.authorization) {
       proxyReq.setHeader('Authorization', req.headers.authorization);
-    } else if (req._controllerToken) {
-      proxyReq.setHeader('Authorization', `Bearer ${req._controllerToken}`);
     }
-
+    
     // Remove the x-controller-url header before forwarding (internal use only)
     proxyReq.removeHeader('x-controller-url');
   },
@@ -1091,28 +1058,11 @@ const proxyOptions = {
   }
 };
 
-// ── Auth routes: /auth/* → XIQ login proxy ───────────────────────────────────
-app.use('/auth', express.json(), authRouter);
-
-// ── XIQ Cloud routes: /cloud/* → ExtremeCloud IQ API ─────────────────────────
-// Handles: cloud inventory, devices, SSIDs, cloud services
-app.use('/cloud', express.json(), cloudRouter);
-
-// ── Inlets Controller routes: /controller/* → Campus Controller via Inlets ───
-// Handles: controller config, RF profiles, WLANs, runtime state
-app.use('/controller', express.json(), controllerRouter);
-
 // Proxy all /api/* requests to Campus Controller (with dynamic routing support)
-// Pre-fetch the campus controller token so onProxyReq (which is sync) can inject it.
 console.log('[Proxy Server] Setting up /api/* proxy middleware with dynamic routing');
-app.use('/api', async (req, res, next) => {
+app.use('/api', (req, res, next) => {
   const target = getControllerUrl(req);
   console.log(`[Proxy Middleware] Received: ${req.method} ${req.url} (target: ${target})`);
-  try {
-    req._controllerToken = await getControllerToken();
-  } catch (err) {
-    console.warn('[Proxy] Could not get controller token — forwarding without auth:', err.message);
-  }
   next();
 }, createProxyMiddleware(proxyOptions));
 

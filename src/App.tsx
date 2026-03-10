@@ -702,12 +702,6 @@ export default function App() {
   };
 
   const handleLoginSuccess = async () => {
-    // Apply the per-customer controller URL discovered during login
-    const controllerUrl = localStorage.getItem('controller_url');
-    if (controllerUrl) {
-      apiService.setBaseUrl(controllerUrl);
-    }
-
     setIsAuthenticated(true);
     setAdminRole(apiService.getAdminRole());
     setJustLoggedIn(true);
