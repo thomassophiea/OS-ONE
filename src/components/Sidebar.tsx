@@ -16,7 +16,9 @@ import {
   Sun,
   Moon,
   Monitor,
+  Braces,
   Zap,
+  Layers,
   BarChart3,
   Wrench,
   AppWindow,
@@ -29,7 +31,9 @@ import {
   HardDrive,
   LayoutDashboard,
   HelpCircle,
-  Target
+  Target,
+  Server,
+  Building2
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import extremeNetworksLogo from 'figma:asset/cc372b1d703a0b056a9f8c590da6c8e1cb4947fd.png';
@@ -42,13 +46,15 @@ import { VersionBadge } from './VersionBadge';
 import { useDeviceDetection } from '@/hooks/useDeviceDetection';
 import { useEffect } from 'react';
 import { prefetchComponent } from '@/lib/prefetch';
+import { useSiteGroups } from '@/hooks/useSiteGroups';
+import { tenantService } from '../services/tenantService';
 
 interface SidebarProps {
   onLogout: () => void;
   adminRole: string | null;
   currentPage: string;
   onPageChange: (page: string) => void;
-  theme?: 'light' | 'dark' | 'synthwave' | 'system';
+  theme?: 'light' | 'ep1' | 'dev';
   onThemeToggle?: () => void;
 }
 
@@ -85,11 +91,13 @@ const systemItems = [
   { id: 'guest-management', label: 'Guest Access', icon: UserPlus },
 ];
 
-export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme = 'system', onThemeToggle }: SidebarProps) {
+export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme = 'ep1', onThemeToggle }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const branding = useBranding();
   const device = useDeviceDetection();
+  const { siteGroups } = useSiteGroups();
+  const org = tenantService.getCurrentOrganization();
 
   // Check if any configure sub-item is currently active
   const isConfigureActive = configureItems.some(item => currentPage === item.id);
@@ -98,6 +106,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
   // Auto-expand sections if an item is active
   const [isConfigureExpanded, setIsConfigureExpanded] = useState(isConfigureActive);
   const [isSystemExpanded, setIsSystemExpanded] = useState(isSystemActive);
+  const [isSiteGroupsExpanded, setIsSiteGroupsExpanded] = useState(true);
 
   // Close mobile sidebar when page changes
   useEffect(() => {
@@ -162,7 +171,16 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
           {!isCollapsed && (
             <div className="flex items-center space-x-2">
               <div className="text-foreground">
-                <span className="text-muted-foreground text-xs">{branding.fullName}</span>
+                <span className="font-semibold text-sm tracking-widest">{branding.fullName}</span>
+                {org?.name ? (
+                  <p className="text-[10px] text-muted-foreground/70 tracking-wide leading-tight mt-0.5 truncate max-w-[160px]">
+                    {org.name}
+                  </p>
+                ) : branding.tagline ? (
+                  <p className="text-[10px] text-muted-foreground/60 tracking-wide leading-tight mt-0.5">
+                    {branding.tagline}
+                  </p>
+                ) : null}
               </div>
             </div>
           )}
@@ -210,6 +228,51 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
           );
         })}
         
+        {/* Site Groups Section */}
+        {!isCollapsed && siteGroups.length > 0 && (
+          <div className="space-y-1 pt-1">
+            <Button
+              variant="ghost"
+              className="w-full justify-start h-9 px-3 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={() => setIsSiteGroupsExpanded(!isSiteGroupsExpanded)}
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              <span className="flex-1 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Site Groups
+              </span>
+              {isSiteGroupsExpanded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </Button>
+
+            {isSiteGroupsExpanded && (
+              <div className="ml-4 space-y-0.5">
+                {siteGroups.map(sg => (
+                  <div
+                    key={sg.id}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-default"
+                  >
+                    <Server className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{sg.name}</span>
+                    <span
+                      className={cn(
+                        'ml-auto h-1.5 w-1.5 rounded-full shrink-0',
+                        sg.connection_status === 'connected' ? 'bg-green-500' :
+                        sg.connection_status === 'disconnected' ? 'bg-red-500' :
+                        sg.connection_status === 'error' ? 'bg-amber-500' :
+                        'bg-muted-foreground/40'
+                      )}
+                      title={sg.connection_status}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Configure Section */}
         <div className="space-y-1">
           <Button
@@ -400,24 +463,17 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
               "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent",
               isCollapsed ? "px-2" : "px-3"
             )}
-            title={`Switch theme (current: ${theme === 'system' ? 'auto' : theme})`}
+            title={`Switch theme (current: ${theme})`}
           >
-            {theme === 'light' ? (
-              <Sun className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            ) : theme === 'dark' ? (
+            {theme === 'ep1' ? (
               <Moon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            ) : theme === 'synthwave' ? (
-              <Zap className={cn("h-4 w-4 text-pink-400", !isCollapsed && "mr-2")} />
+            ) : theme === 'dev' ? (
+              <Braces className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
             ) : (
-              <Monitor className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+              <Sun className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
             )}
             {!isCollapsed && (
-              <span>
-                {theme === 'light' ? 'Light' :
-                 theme === 'dark' ? 'Dark' :
-                 theme === 'synthwave' ? 'Miami Vice' :
-                 'Auto'}
-              </span>
+              <span>{theme === 'ep1' ? 'Dark' : theme === 'dev' ? 'Dev' : 'Light'}</span>
             )}
           </Button>
         )}

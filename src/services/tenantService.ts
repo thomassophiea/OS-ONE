@@ -31,6 +31,25 @@ export interface Controller {
   created_at?: string;
 }
 
+/**
+ * SiteGroup is the org-level abstraction for a controller pair or single
+ * campus controller domain. Each Controller maps to exactly one SiteGroup.
+ * This layer scales cleanly when more controller pairs are added later.
+ */
+export interface SiteGroup {
+  id: string;
+  org_id: string;
+  name: string;
+  description?: string;
+  /** Resolved base URL — ready for use as the API base without further processing. */
+  controller_url: string;
+  controller_port?: number;
+  connection_status: 'connected' | 'disconnected' | 'error' | 'unknown';
+  last_connected_at?: string;
+  is_default: boolean;
+  created_at?: string;
+}
+
 export interface UserOrganization {
   id: string;
   user_id: string;
@@ -63,43 +82,12 @@ const STORAGE_KEYS = {
   USER_PROFILE: 'api_user_profile'
 };
 
-// Default controller configuration
-const DEFAULT_CONTROLLER: Controller = {
-  id: 'default-controller',
-  org_id: 'default',
-  name: 'TGS-XIQC-VE6120',
-  description: 'Default Platform ONE Controller',
-  url: 'https://tsophiea.ddns.net',
-  port: 443,
-  is_active: true,
-  is_default: true,
-  connection_status: 'unknown',
-  created_at: new Date().toISOString()
-};
-
 class TenantService {
   private currentController: Controller | null = null;
   private currentOrg: Organization | null = null;
 
   constructor() {
     this.loadFromStorage();
-    this.ensureDefaultController();
-  }
-
-  // Ensure default controller exists
-  private ensureDefaultController() {
-    const controllers = this.getLocalControllers();
-    const hasDefault = controllers.some(c => c.id === DEFAULT_CONTROLLER.id);
-    
-    if (!hasDefault) {
-      this.saveControllerLocally(DEFAULT_CONTROLLER);
-    }
-    
-    // If no current controller is set, use the default
-    if (!this.currentController) {
-      this.currentController = DEFAULT_CONTROLLER;
-      this.saveToStorage();
-    }
   }
 
   // Load saved state from localStorage
@@ -255,8 +243,7 @@ class TenantService {
       console.warn('Supabase not available or timed out, using defaults');
     }
 
-    // Fallback - ensure default controller exists and return it
-    this.ensureDefaultController();
+    // No controllers found — return empty so the UI can show an appropriate empty state
     return this.getLocalControllers();
   }
   
@@ -426,27 +413,62 @@ class TenantService {
     return url.includes(':') ? url : `${url}:${port}`;
   }
 
-  // === Controller Credentials ===
+  // === Per-Site-Group Login Cache ===
+  // Stores username + password in localStorage so the login form can pre-fill
+  // credentials on subsequent sessions without re-entry.
+  // NOTE: credentials are stored base64-encoded (obfuscated, not encrypted).
+  // This is appropriate for a local admin tool. Do not use in a shared or
+  // public-facing deployment without proper credential encryption.
+
+  private readonly CREDS_PREFIX = 'sg_login_';
+
+  saveSiteGroupLogin(controllerId: string, username: string, password: string): void {
+    try {
+      const payload = JSON.stringify({ username, password });
+      localStorage.setItem(`${this.CREDS_PREFIX}${controllerId}`, btoa(payload));
+    } catch {
+      // localStorage quota or other error — skip silently
+    }
+  }
+
+  getSiteGroupLogin(controllerId: string): { username: string; password: string } | null {
+    try {
+      const raw = localStorage.getItem(`${this.CREDS_PREFIX}${controllerId}`);
+      if (!raw) return null;
+      return JSON.parse(atob(raw)) as { username: string; password: string };
+    } catch {
+      return null;
+    }
+  }
+
+  clearSiteGroupLogin(controllerId: string): void {
+    localStorage.removeItem(`${this.CREDS_PREFIX}${controllerId}`);
+  }
+
+  // === Controller Credentials (Supabase — username only, no password) ===
 
   async saveControllerCredentials(
-    controllerId: string, 
+    controllerId: string,
     credentials: Omit<ControllerCredentials, 'controller_id'>
   ): Promise<void> {
-    // For security, we store credentials in Supabase with encryption
-    // In a production app, use Supabase Vault or similar
+    // WARNING: passwords are NOT encrypted here. Only the username / credential_type
+    // are persisted to Supabase. Storing plaintext passwords in the database or
+    // localStorage is a security risk — use Supabase Vault (or omit passwords
+    // entirely and re-prompt the user each session) before shipping to production.
     const { error } = await supabase
       .from('controller_credentials')
       .upsert({
         controller_id: controllerId,
-        ...credentials,
-        // Note: In production, encrypt the password before storing
-        encrypted_password: credentials.password
+        credential_type: credentials.credential_type,
+        username: credentials.username,
+        // Do NOT persist the password — column is misleadingly named; leave null
+        encrypted_password: null
       });
 
     if (error) {
-      // Fallback: store in localStorage (less secure, for development)
-      const key = `controller_creds_${controllerId}`;
-      localStorage.setItem(key, JSON.stringify(credentials));
+      // Supabase unavailable — skip localStorage fallback to avoid storing
+      // plaintext credentials in the browser.
+      console.warn('[TenantService] Could not save controller credentials:', error.message);
     }
   }
 
@@ -454,7 +476,7 @@ class TenantService {
     try {
       const { data, error } = await supabase
         .from('controller_credentials')
-        .select('*')
+        .select('controller_id, credential_type, username')
         .eq('controller_id', controllerId)
         .single();
 
@@ -464,13 +486,10 @@ class TenantService {
         controller_id: data.controller_id,
         credential_type: data.credential_type,
         username: data.username,
-        password: data.encrypted_password // In production, decrypt
+        password: '' // Password is never persisted — caller must re-prompt the user
       };
     } catch {
-      // Fallback to localStorage
-      const key = `controller_creds_${controllerId}`;
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : null;
+      return null;
     }
   }
 
@@ -559,6 +578,40 @@ class TenantService {
     return controller;
   }
 
+  // === Site Groups ===
+  // Each Controller maps to one SiteGroup. This layer exists so the rest of the
+  // app can reason about "site groups" without knowing about raw controllers.
+
+  async getSiteGroups(orgId?: string): Promise<SiteGroup[]> {
+    const controllers = await this.getControllers(orgId);
+    return controllers.map(c => this.controllerToSiteGroup(c));
+  }
+
+  private controllerToSiteGroup(c: Controller): SiteGroup {
+    return {
+      id: c.id,
+      org_id: c.org_id,
+      name: c.name,
+      description: c.description,
+      controller_url: this.resolveUrl(c.url, c.port),
+      controller_port: c.port,
+      connection_status: c.connection_status,
+      last_connected_at: c.last_connected_at,
+      is_default: c.is_default,
+      created_at: c.created_at,
+    };
+  }
+
+  private resolveUrl(url: string, port?: number): string {
+    const p = port || 443;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return `https://${url}:${p}`;
+    }
+    // If no explicit port already appended, add it
+    const hasPort = /:\d+$/.test(url);
+    return hasPort ? url : `${url}:${p}`;
+  }
+
   // === Clear All Data ===
 
   clearAll() {
@@ -572,6 +625,3 @@ class TenantService {
 
 // Export singleton instance
 export const tenantService = new TenantService();
-
-// Export default controller for reference
-export { DEFAULT_CONTROLLER };

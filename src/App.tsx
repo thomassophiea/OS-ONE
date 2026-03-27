@@ -52,16 +52,17 @@ const GuestManagement = lazy(() => import('./components/GuestManagement').then(m
 const ApiDocumentation = lazy(() => import('./components/ApiDocumentation').then(m => ({ default: m.ApiDocumentation })));
 const Workspace = lazy(() => import('./components/Workspace').then(m => ({ default: m.Workspace })));
 const HelpPage = lazy(() => import('./components/HelpPage').then(m => ({ default: m.HelpPage })));
-const SynthwaveMusicPlayer = lazy(() => import('./components/SynthwaveMusicPlayer').then(m => ({ default: m.SynthwaveMusicPlayer })));
 import { apiService, ApiCallLog } from './services/api';
+import { AppContextProvider } from './contexts/AppContext';
 import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
 import { PageSkeleton, getSkeletonVariant } from './components/ui/PageSkeleton';
 import { Button } from './components/ui/button';
-import { Activity, Sun, Moon, Braces, Github, FlaskConical, BarChart3 } from 'lucide-react';
+import { Activity, Sun, Moon, Braces, Github, FlaskConical, BarChart3, Bell, LayoutGrid } from 'lucide-react';
 import { AppsMenu } from './components/AppsMenu';
 import { UserMenu } from './components/UserMenu';
 import { NotificationsMenu } from './components/NotificationsMenu';
+import { tenantService } from './services/tenantService';
 import { DevModePanel } from './components/DevModePanel';
 import { VersionDisplay } from './components/VersionDisplay';
 import { toast } from 'sonner';
@@ -93,7 +94,7 @@ const pageInfo = {
   'guest-management': { title: 'Guest Access', description: 'Manage guest wireless access accounts' },
   'administration': { title: 'Administration', description: 'System administration, users, applications, and licensing' },
   'api-test': { title: 'API Test Tool', description: 'Test and explore API endpoints' },
-  'api-documentation': { title: 'API Documentation', description: 'API Platform REST API reference' },
+  'api-documentation': { title: 'API Documentation', description: 'AURA Mobility Core REST API reference' },
   'configure-sites': { title: 'Sites', description: 'Manage and configure network sites and locations' },
   'configure-networks': { title: 'Configure Networks', description: 'Set up and manage network configurations' },
   'configure-advanced': { title: 'Advanced Configuration', description: 'Topologies, QoS, AP Profiles, IoT, Mesh, Access Control, and Location Services' },
@@ -112,14 +113,13 @@ export default function App() {
   const [adminRole, setAdminRole] = useState<string | null>(null);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'synthwave' | 'system'>('system');
+  const [theme, setTheme] = useState<'light' | 'ep1' | 'dev'>('ep1');
   const [detailPanel, setDetailPanel] = useState<DetailPanelState>({
     isOpen: false,
     type: null,
     data: null
   });
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
-  const [isMusicPlayerDismissed, setIsMusicPlayerDismissed] = useState(false);
   const [networkAssistantEnabled, setNetworkAssistantEnabled] = useState(() => {
     // Default to false - hidden by default
     return localStorage.getItem('networkAssistantEnabled') === 'true';
@@ -186,8 +186,8 @@ export default function App() {
   useEffect(() => {
     // Initialize theme from localStorage or system preference
     const initializeTheme = () => {
-      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'synthwave' | 'system' | null;
-      const initialTheme = savedTheme || 'system';
+      const saved = localStorage.getItem('theme');
+      const initialTheme: 'light' | 'ep1' | 'dev' = (saved === 'light' || saved === 'ep1' || saved === 'dev') ? saved : 'ep1';
 
       setTheme(initialTheme);
       applyThemeForMode(initialTheme);
@@ -234,19 +234,6 @@ export default function App() {
 
     // Initialize with current logs
     setApiLogs(apiService.getApiLogs());
-
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      // Only auto-switch if user has selected system theme
-      const savedTheme = localStorage.getItem('theme');
-      if (!savedTheme || savedTheme === 'system') {
-        const systemTheme = e.matches ? 'dark' : 'light';
-        applyTheme(systemTheme);
-      }
-    };
-    
-    mediaQuery.addEventListener('change', handleSystemThemeChange);
 
     // Periodically check authentication status (very infrequently)
     // Only check if tokens are present - rely on API errors for actual session validation
@@ -614,8 +601,6 @@ export default function App() {
       console.warn = originalConsoleWarn;
       // Remove window error listeners
       window.removeEventListener('error', handleGlobalError);
-      // Remove system theme listener
-      mediaQuery.removeEventListener('change', handleSystemThemeChange);
       // Clear auth check interval
       clearInterval(authCheckInterval);
       // Cancel any pending requests on cleanup
@@ -625,78 +610,48 @@ export default function App() {
     };
   }, []);
 
-  // All special themes that layer on top of dark mode
-  const DARK_OVERLAY_THEMES = ['synthwave', 'pirate', 'mi5'] as const;
-
   // Helper function to apply theme to document
-  const applyTheme = (newTheme: string) => {
+  const applyTheme = (newTheme: 'light' | 'ep1' | 'dev') => {
     const root = document.documentElement;
+    const baseTheme = newTheme === 'ep1' ? 'ep1' : newTheme === 'dev' ? 'dev' : 'default';
+    applyThemeColors(baseTheme);
 
-    // All overlay themes use dark as their base
-    const isDarkOverlay = DARK_OVERLAY_THEMES.includes(newTheme as any);
-    applyThemeColors(newTheme === 'light' ? 'default' : 'dark');
+    root.classList.remove('light', 'dark', 'ep1', 'dev', 'synthwave', 'pirate', 'mi5');
+    document.body.classList.remove('light', 'dark', 'ep1', 'dev', 'synthwave', 'pirate', 'mi5');
 
-    // Remove existing theme classes
-    root.classList.remove('light', 'dark', 'synthwave', 'pirate', 'mi5');
-
-    if (isDarkOverlay) {
-      root.classList.add('dark', newTheme);
+    if (newTheme === 'ep1') {
+      root.classList.add('dark', 'ep1');
+      document.body.classList.add('dark', 'ep1');
+    } else if (newTheme === 'dev') {
+      root.classList.add('dark', 'dev');
+      document.body.classList.add('dark', 'dev');
     } else {
-      root.classList.add(newTheme);
+      root.classList.add('light');
+      document.body.classList.add('light');
     }
-
-    // Set data attribute for theme as well (for compatibility)
     root.setAttribute('data-theme', newTheme);
-
-    // Ensure body also gets the theme class
-    document.body.classList.remove('light', 'dark', 'synthwave', 'pirate', 'mi5');
-    if (isDarkOverlay) {
-      document.body.classList.add('dark', newTheme);
-    } else {
-      document.body.classList.add(newTheme);
-    }
   };
 
-  // Helper function to apply theme based on mode (handles system detection)
-  const applyThemeForMode = (mode: 'light' | 'dark' | 'synthwave' | 'system') => {
-    if (mode === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      applyTheme(systemTheme);
-    } else {
-      applyTheme(mode);
-    }
+  const applyThemeForMode = (mode: 'light' | 'ep1') => {
+    applyTheme(mode);
   };
 
   const toggleTheme = () => {
-    const newTheme =
-      theme === 'light' ? 'dark' :
-      theme === 'dark' ? 'synthwave' :
-      theme === 'synthwave' ? 'system' :
-      'light';
+    const cycle: Record<'light' | 'ep1' | 'dev', 'light' | 'ep1' | 'dev'> = {
+      ep1: 'dev',
+      dev: 'light',
+      light: 'ep1',
+    };
+    const newTheme = cycle[theme];
     setTheme(newTheme);
-    applyThemeForMode(newTheme);
-
-    // Reset music player when switching to synthwave
-    if (newTheme === 'synthwave') {
-      setIsMusicPlayerDismissed(false);
-    }
-
-    // Save to localStorage
+    applyTheme(newTheme);
     localStorage.setItem('theme', newTheme);
 
-    // Show a toast notification
-    const themeLabel =
-      newTheme === 'system' ? 'System (Auto)' :
-      newTheme === 'synthwave' ? 'Miami Vice' :
-      newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+    const labels = { ep1: 'Dark', dev: 'Dev', light: 'Light' };
+    const descriptions = { ep1: 'Dark mode activated.', dev: 'Developer mode activated.', light: 'Light mode activated.' };
 
-    const themeDescription =
-      newTheme === 'system' ? 'The interface will now follow your system preference.' :
-      newTheme === 'synthwave' ? 'Welcome to Miami. Neon lights activated.' :
-      `The interface is now using ${newTheme} theme.`;
-
-    toast.success(`Switched to ${themeLabel} mode`, {
-      description: themeDescription,
+    toast.success(`Switched to ${labels[newTheme]} mode`, {
+      description: descriptions[newTheme],
       duration: 2000
     });
   };
@@ -1026,118 +981,100 @@ export default function App() {
   }
 
   return (
+    <AppContextProvider>
     <>
-      {/* Miami Vice sunset background - fixed behind everything */}
-      {theme === 'synthwave' && (
+      {/* Unified floating-card layout — all themes */}
+      <div
+        className="flex flex-col bg-background"
+        style={{ height: '100vh', padding: 16, gap: 16, position: 'relative', zIndex: 1 }}
+      >
+        {/* Universal top bar card */}
         <div
-          className="fixed inset-0 w-screen h-screen"
+          className="bg-sidebar shrink-0 flex items-center gap-3 rounded-[8px]"
           style={{
-            zIndex: 0,
-            pointerEvents: 'none',
-            background: [
-              "url('/synthwave-silhouette.svg') center bottom / cover no-repeat fixed",
-              "radial-gradient(ellipse 30% 28% at 50% 50%, rgba(255,213,79,0.85) 0%, rgba(255,171,64,0.65) 25%, rgba(255,109,0,0.35) 50%, rgba(255,61,0,0.15) 70%, transparent 100%)",
-              "linear-gradient(to bottom, #0a0520 0%, #150a35 10%, #2d1260 20%, #5c1a8e 30%, #8e1580 37%, #c91880 43%, #e83068 47%, #ff5040 51%, #ff7830 55%, #ff5040 59%, #c91880 65%, #5c1a8e 75%, #2d1260 85%, #150a35 92%, #0a0520 100%)"
-            ].join(', ')
-          }}
-        />
-      )}
-      <div className={`h-screen flex ${theme === 'synthwave' ? '' : 'bg-background'}`} style={{ position: 'relative', zIndex: 1 }}>
-        <Sidebar
-          onLogout={handleLogout}
-          adminRole={adminRole}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          theme={theme}
-          onThemeToggle={toggleTheme}
-        />
-
-        <main
-          className="flex-1 overflow-auto transition-all duration-200"
-          style={{
-            paddingBottom: isDevModeOpen ? `${devPanelHeight}px` : '0'
+            height: 52,
+            padding: '0 16px',
+            boxShadow: theme === 'ep1'
+              ? '0px 16px 16px 0px rgba(30,31,42,0.24),0px 8px 8px 0px rgba(30,31,42,0.24),0px 4px 4px 0px rgba(30,31,42,0.24),0px 2px 2px 0px rgba(30,31,42,0.24)'
+              : '0 2px 8px rgba(0,0,0,0.12)',
           }}
         >
-          <div className="p-4 sm:p-6 pt-16 sm:pt-6">
-            {/* Top Bar - Simplified on mobile */}
-            <div className="flex justify-between items-center gap-3 mb-4 sm:mb-6">
-              <h2 className="text-base sm:text-lg font-semibold text-[rgba(255,255,255,1)] truncate flex-1">
-                {pageInfo[currentPage as keyof typeof pageInfo]?.title || 'Mobility Engine'}
-              </h2>
+          {/* Left side — persistent brand across all themes */}
+          <img src="/branding/extreme-e.png" alt="Extreme Networks" style={{ height: 36, width: 36, objectFit: 'contain', flexShrink: 0 }} />
+          <span className="text-sm font-semibold text-foreground" style={{ flexShrink: 0, letterSpacing: '-0.01em' }}>
+            <span style={{ fontWeight: 700 }}>Extreme</span>
+            {' '}
+            <span className="text-muted-foreground" style={{ fontWeight: 400 }}>Platform ONE™ | Networking</span>
+          </span>
+          <div style={{ flex: 1 }} />
+          {(() => {
+            const controller = tenantService.getCurrentController();
+            const org = tenantService.getCurrentOrganization();
+            const siteLabel = (controller?.name || org?.name || 'Extreme Networks').toUpperCase();
+            return (
+              <span className="text-muted-foreground text-xs font-semibold bg-background border border-border rounded px-2 py-0.5" style={{ letterSpacing: '0.08em', flexShrink: 0 }}>
+                {siteLabel}
+              </span>
+            );
+          })()}
 
-              <div className="flex items-center gap-2">
-                {/* Desktop-only developer tools */}
-                {!device.isMobile && (
-                  <>
-                    {/* Developer Mode Toggle */}
-                    <Button
-                      variant={isDevModeOpen ? 'default' : 'secondary'}
-                      size="sm"
-                      onClick={handleToggleDevMode}
-                      className="flex items-center"
-                      title="Toggle Developer Mode"
-                    >
-                      <Braces className="h-4 w-4" />
-                    </Button>
+          {/* Right side — controls for all themes */}
+          <div className="flex items-center gap-1 ml-auto">
+            {!device.isMobile && theme === 'dev' && (
+              <>
+                <Button variant={isDevModeOpen ? 'default' : 'ghost'} size="sm" onClick={handleToggleDevMode} title="Developer Mode - API Monitor">
+                  <Braces className="h-4 w-4" />
+                </Button>
+                <Button variant={currentPage === 'api-test' ? 'default' : 'ghost'} size="sm" onClick={() => setCurrentPage('api-test')} title="API Test Tool">
+                  <FlaskConical className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => window.open('https://github.com/thomassophiea/EDGE', '_blank', 'noopener,noreferrer')} title="GitHub">
+                  <Github className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            {!device.isMobile && <NotificationsMenu />}
+            {!device.isMobile && <AppsMenu />}
+            <UserMenu
+              onLogout={handleLogout}
+              theme={theme}
+              onThemeToggle={toggleTheme}
+              userEmail={localStorage.getItem('user_email') || undefined}
+              onNavigateTo={handlePageChange}
+            />
+          </div>
+        </div>
 
-                    {/* API Test Tool */}
-                    <Button
-                      variant={currentPage === 'api-test' ? 'default' : 'secondary'}
-                      size="sm"
-                      onClick={() => setCurrentPage('api-test')}
-                      className="flex items-center"
-                      title="API Test Tool"
-                    >
-                      <FlaskConical className="h-4 w-4" />
-                    </Button>
-
-                    {/* GitHub Repository */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => window.open('https://github.com/thomassophiea/EDGE', '_blank', 'noopener,noreferrer')}
-                      className="flex items-center"
-                      title="View on GitHub"
-                    >
-                      <Github className="h-4 w-4" />
-                    </Button>
-
-                    {/* Notifications Menu */}
-                    <NotificationsMenu />
-
-                    {/* Apps Menu */}
-                    <AppsMenu />
-                  </>
-                )}
-
-                {/* Always show User Menu */}
-                <UserMenu
-                  onLogout={handleLogout}
-                  theme={theme}
-                  onThemeToggle={toggleTheme}
-                  userEmail={localStorage.getItem('user_email') || undefined}
-                  onNavigateTo={handlePageChange}
-                />
-              </div>
-            </div>
-
-            <div>
-              {/* key=currentPage resets the boundary automatically on navigation */}
+        {/* Sidebar + Content row */}
+        <div style={{ flex: 1, display: 'flex', gap: 16, overflow: 'hidden' }}>
+          <Sidebar
+            onLogout={handleLogout}
+            adminRole={adminRole}
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            theme={theme}
+            onThemeToggle={toggleTheme}
+          />
+          <main
+            className="flex-1 overflow-auto bg-sidebar rounded-[8px] transition-all duration-200"
+            style={{
+              paddingBottom: isDevModeOpen ? `${devPanelHeight}px` : '0',
+              boxShadow: theme === 'ep1'
+                ? '0px 16px 16px 0px rgba(30,31,42,0.24),0px 8px 8px 0px rgba(30,31,42,0.24),0px 4px 4px 0px rgba(30,31,42,0.24),0px 2px 2px 0px rgba(30,31,42,0.24)'
+                : '0 2px 8px rgba(0,0,0,0.12)',
+            }}
+          >
+            <div className="p-4 sm:p-6">
               <ErrorBoundary key={currentPage} fallbackTitle="Page Error">
                 <Suspense fallback={<PageSkeleton variant={getSkeletonVariant(currentPage)} />}>
-                  <div className="animate-in fade-in duration-300">
-                    {renderPage()}
-                  </div>
+                  <div className="animate-in fade-in duration-300">{renderPage()}</div>
                 </Suspense>
               </ErrorBoundary>
             </div>
-          </div>
-        </main>
+          </main>
+        </div>
 
-        {/* Only show toasts on desktop - mobile uses bottom sheets for notifications */}
         {!device.isMobile && <Toaster />}
-
-        {/* Detail Slide-out Panel */}
         {renderDetailPanel()}
       </div>
       
@@ -1163,18 +1100,9 @@ export default function App() {
           onHeightChange={setDevPanelHeight}
         />
       )}
-      {/* Synthwave Music Player - Shows when Miami Vice theme is active */}
-      {theme === 'synthwave' && !isMusicPlayerDismissed && (
-        <Suspense fallback={null}>
-          <SynthwaveMusicPlayer
-            isVisible={true}
-            onClose={() => setIsMusicPlayerDismissed(true)}
-          />
-        </Suspense>
-      )}
-
       {/* Version Display - Fixed to bottom-left */}
       <VersionDisplay position="bottom-left" />
     </>
+    </AppContextProvider>
   );
 }

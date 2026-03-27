@@ -102,25 +102,25 @@
 
 .dark {
   /* Material Design Dark Theme */
-  --background: #121212;
+  --background: #1e1f2a;
   --foreground: rgba(255, 255, 255, 0.87);
-  --card: #121212;
+  --card: #1e1f2a;
   --card-foreground: rgba(255, 255, 255, 0.87);
-  --popover: #121212;
+  --popover: #1e1f2a;
   --popover-foreground: rgba(255, 255, 255, 0.87);
   --primary: #BB86FC;
   --primary-foreground: rgba(0, 0, 0, 0.87);
   --secondary: #03DAC5;
   --secondary-foreground: rgba(0, 0, 0, 0.87);
-  --muted: #121212;
+  --muted: #1e1f2a;
   --muted-foreground: rgba(255, 255, 255, 0.60);
-  --accent: #121212;
+  --accent: #1e1f2a;
   --accent-foreground: rgba(255, 255, 255, 0.87);
   --destructive: #CF6679;
   --destructive-foreground: rgba(0, 0, 0, 0.87);
   --border: rgba(255, 255, 255, 0.12);
-  --input: #121212;
-  --input-background: #121212;
+  --input: #1e1f2a;
+  --input-background: #1e1f2a;
   --ring: #BB86FC;
   --chart-1: #BB86FC;
   --chart-2: #03DAC5;
@@ -763,16 +763,16 @@ html {
   --safe-secondary: var(--secondary, #018786);
 }
 
-/* Ensure body styles use Material Design colors */
-html, body {
+/* Ensure body styles use Material Design colors — EP1 manages its own */
+html:not(.ep1), body:not(.ep1) {
   background-color: var(--safe-background) !important;
   color: var(--safe-foreground) !important;
   font-family: var(--font-family-sans) !important;
 }
 
-/* Material Design theme enforcement */
-html.dark, html.dark body, .dark {
-  background-color: #121212 !important;
+/* Material Design theme enforcement — exclude EP1 which manages its own background */
+html.dark:not(.ep1), html.dark:not(.ep1) body, body.dark:not(.ep1) {
+  background-color: #1e1f2a !important;
   color: rgba(255, 255, 255, 0.87) !important;
 }
 
@@ -782,8 +782,8 @@ html.light, html.light body, .light {
 }
 
 /* Material Design data attribute support */
-html[data-theme="dark"], html.dark {
-  background: #121212 !important;
+html[data-theme="dark"]:not(.ep1), html.dark:not(.ep1) {
+  background: #1e1f2a !important;
   color: rgba(255, 255, 255, 0.87) !important;
 }
 
@@ -1950,4 +1950,1333 @@ body::-webkit-scrollbar {
 
 .animate-value-flash {
   animation: value-flash 0.5s ease-in-out;
+}
+
+
+/* ==========================================================================
+   SYNTHWAVE / MIAMI VICE THEME
+   ========================================================================== */
+
+/* --- Neon CSS Variable Overrides --- */
+html.synthwave,
+html[data-theme="synthwave"] {
+  --background: rgba(6, 2, 20, 0.0);
+  --foreground: #f0e6ff;
+  --card: rgba(12, 5, 35, 0.75);
+  --card-foreground: #f0e6ff;
+  --popover: rgba(10, 4, 28, 0.96);
+  --popover-foreground: #f0e6ff;
+  --primary: #ff2d9b;
+  --primary-foreground: #ffffff;
+  --secondary: rgba(255, 45, 155, 0.12);
+  --secondary-foreground: #ff2d9b;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: rgba(200, 160, 255, 0.65);
+  --accent: rgba(0, 230, 255, 0.12);
+  --accent-foreground: #00e6ff;
+  --destructive: #ff3860;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 45, 155, 0.28);
+  --input: rgba(255, 45, 155, 0.12);
+  --ring: #ff2d9b;
+  --sidebar: rgba(5, 1, 18, 0.92);
+  --sidebar-foreground: #f0e6ff;
+  --sidebar-primary: #ff2d9b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255, 45, 155, 0.14);
+  --sidebar-accent-foreground: #ff2d9b;
+  --sidebar-border: rgba(255, 45, 155, 0.22);
+  --sidebar-ring: #ff2d9b;
+  --chart-1: #ff2d9b;
+  --chart-2: #00e6ff;
+  --chart-3: #bf5fff;
+  --chart-4: #ff7b2c;
+  --chart-5: #ffe600;
+  --success: #39ff14;
+  --success-foreground: #000000;
+  --warning: #ffe600;
+  --warning-foreground: #000000;
+  --info: #00e6ff;
+  --info-foreground: #000000;
+}
+
+/* Override the heavy-handed dark theme background enforcement */
+html.dark.synthwave,
+html.dark.synthwave body {
+  background-color: transparent !important;
+  color: #f0e6ff !important;
+}
+
+/* --- Glassmorphism Cards --- */
+.synthwave .card,
+.synthwave [data-slot="card"] {
+  background: rgba(12, 5, 35, 0.72) !important;
+  border: 1px solid rgba(255, 45, 155, 0.30) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 45, 155, 0.08),
+    0 4px 32px rgba(255, 0, 110, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+}
+
+.synthwave .card:hover,
+.synthwave [data-slot="card"]:hover {
+  border-color: rgba(255, 45, 155, 0.55) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 45, 155, 0.18),
+    0 0 22px rgba(255, 45, 155, 0.18),
+    0 8px 40px rgba(255, 0, 110, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+/* --- Neon Sidebar --- */
+.synthwave .bg-sidebar,
+.synthwave [class*="bg-sidebar"] {
+  background: rgba(4, 1, 15, 0.92) !important;
+  border-right: 1px solid rgba(255, 45, 155, 0.20) !important;
+  box-shadow: 4px 0 32px rgba(255, 0, 110, 0.07), 4px 0 8px rgba(123, 47, 255, 0.05) !important;
+}
+
+/* Sidebar nav item active glow */
+.synthwave [data-active="true"],
+.synthwave [aria-current="page"] {
+  color: #ff2d9b !important;
+  text-shadow: 0 0 10px rgba(255, 45, 155, 0.6) !important;
+  background: rgba(255, 45, 155, 0.10) !important;
+}
+
+/* --- Neon Table --- */
+.synthwave thead th {
+  color: #00e6ff !important;
+  text-shadow: 0 0 10px rgba(0, 230, 255, 0.55), 0 0 20px rgba(0, 230, 255, 0.25) !important;
+  border-bottom: 1px solid rgba(0, 230, 255, 0.22) !important;
+  background: rgba(0, 40, 70, 0.25) !important;
+}
+
+.synthwave tbody tr:hover td {
+  background: rgba(255, 45, 155, 0.07) !important;
+}
+
+.synthwave tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015) !important;
+}
+
+.synthwave table {
+  border-color: rgba(255, 45, 155, 0.14) !important;
+}
+
+/* --- Neon Inputs --- */
+.synthwave input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.synthwave textarea,
+.synthwave select {
+  background: rgba(12, 5, 35, 0.75) !important;
+  border-color: rgba(255, 45, 155, 0.30) !important;
+  color: #f0e6ff !important;
+}
+
+.synthwave input:focus,
+.synthwave textarea:focus {
+  border-color: #ff2d9b !important;
+  box-shadow: 0 0 0 1px rgba(255, 45, 155, 0.6), 0 0 16px rgba(255, 45, 155, 0.28) !important;
+  outline: none !important;
+}
+
+/* --- Neon Scrollbar --- */
+.synthwave ::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.synthwave ::-webkit-scrollbar-track {
+  background: rgba(6, 2, 20, 0.8);
+}
+
+.synthwave ::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #ff2d9b, #7b2fff);
+  border-radius: 3px;
+  box-shadow: 0 0 6px rgba(255, 45, 155, 0.7);
+}
+
+.synthwave ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, #ff5cc0, #9b5fff);
+}
+
+/* --- Neon Focus Ring --- */
+.synthwave *:focus-visible {
+  outline: 2px solid #ff2d9b !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 10px rgba(255, 45, 155, 0.5) !important;
+}
+
+/* --- Neon Dividers --- */
+.synthwave [class*="border-b"],
+.synthwave [class*="border-t"],
+.synthwave hr {
+  border-color: rgba(255, 45, 155, 0.18) !important;
+}
+
+/* --- Neon Typography --- */
+.synthwave h1,
+.synthwave h2,
+.synthwave h3 {
+  text-shadow: 0 0 20px rgba(255, 45, 155, 0.45), 0 0 40px rgba(255, 45, 155, 0.20);
+}
+
+/* --- Neon Popover / Dropdown --- */
+.synthwave [data-radix-popper-content-wrapper],
+.synthwave [role="dialog"],
+.synthwave [role="menu"],
+.synthwave [role="listbox"] {
+  background: rgba(8, 3, 24, 0.96) !important;
+  border-color: rgba(255, 45, 155, 0.38) !important;
+  box-shadow: 0 0 40px rgba(255, 0, 110, 0.18), 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
+}
+
+/* --- Neon Menu Items Hover --- */
+.synthwave [role="menuitem"]:hover,
+.synthwave [role="option"]:hover,
+.synthwave [data-highlighted] {
+  background: rgba(255, 45, 155, 0.12) !important;
+  color: #ff2d9b !important;
+}
+
+/* --- Neon Tab Active --- */
+.synthwave [role="tab"][data-state="active"] {
+  color: #ff2d9b !important;
+  border-bottom-color: #ff2d9b !important;
+  text-shadow: 0 0 10px rgba(255, 45, 155, 0.6) !important;
+}
+
+/* --- Status badge neon colors --- */
+.synthwave .status-healthy {
+  color: #39ff14 !important;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.7);
+}
+.synthwave .status-warning {
+  color: #ffe600 !important;
+  text-shadow: 0 0 8px rgba(255, 230, 0, 0.7);
+}
+.synthwave .status-critical {
+  color: #ff3860 !important;
+  text-shadow: 0 0 8px rgba(255, 56, 96, 0.7);
+}
+
+/* --- Equalizer bar animation --- */
+@keyframes eq-bounce {
+  0%, 100% { height: 4px; }
+  50% { height: 28px; }
+}
+
+@keyframes neon-text-pulse {
+  0%, 100% { text-shadow: 0 0 10px rgba(255, 45, 155, 0.7), 0 0 20px rgba(255, 45, 155, 0.4); }
+  50% { text-shadow: 0 0 20px rgba(255, 45, 155, 1.0), 0 0 40px rgba(255, 45, 155, 0.7), 0 0 60px rgba(255, 45, 155, 0.3); }
+}
+
+@keyframes neon-border-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 45, 155, 0.4), 0 0 20px rgba(255, 45, 155, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(255, 45, 155, 0.7), 0 0 40px rgba(255, 45, 155, 0.4), 0 0 60px rgba(123, 47, 255, 0.2); }
+}
+
+@keyframes scanlines-drift {
+  from { background-position: 0 0; }
+  to { background-position: 0 4px; }
+}
+
+.synthwave-eq-bar {
+  border-radius: 2px;
+  animation: eq-bounce 0.6s ease-in-out infinite alternate;
+  min-height: 4px;
+}
+
+.synthwave-title-glow {
+  animation: neon-text-pulse 2.5s ease-in-out infinite;
+}
+
+.synthwave-card-glow {
+  animation: neon-border-pulse 3s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   EP1 THEME — Extreme Platform ONE
+   Deep indigo/slate enterprise dashboard aesthetic
+   Accent: restrained purple, crisp typography, subtle borders
+   ========================================================================== */
+
+/* --- EP1 CSS Variable Block — matched exactly to Extreme Platform ONE template --- */
+html.ep1,
+html[data-theme="ep1"],
+body.ep1 {
+  /* Core backgrounds — #1e1f2a outer, #2d2f3e surfaces */
+  --background: #1e1f2a !important;
+  --foreground: #f8f8fb !important;
+  --card: #2d2f3e !important;
+  --card-foreground: #f8f8fb !important;
+  --popover: #2d2f3e !important;
+  --popover-foreground: #f8f8fb !important;
+
+  /* Primary — template: rgba(137,129,229) = #8981e5 (medium lavender purple)
+     NOTE: #6930DF is only for the E-mark logo SVG, NOT primary interactive elements */
+  --primary: #8981e5 !important;
+  --primary-foreground: #1e1a46 !important;  /* dark navy on purple */
+
+  /* Secondary — template: transparent bg, light lavender text */
+  --secondary: transparent !important;
+  --secondary-foreground: #aba3fb !important;  /* rgba(171,163,251) */
+
+  /* Muted — template: transparent bg; we keep #2d2f3e to preserve table/row hover UX */
+  --muted: #2d2f3e !important;
+  --muted-foreground: #babcce !important;  /* rgba(186,188,206) */
+
+  /* Accent — template: same purple as primary for hover states */
+  --accent: #8981e5 !important;
+  --accent-foreground: #1e1a46 !important;  /* dark navy on purple hover */
+
+  /* Destructive — template: rgba(237,95,86) */
+  --destructive: #ed5f56 !important;
+  --destructive-foreground: #f8f8fb !important;
+
+  /* Status (AURA custom — not in template) */
+  --success: #75bf63 !important;  /* template chart-3 green */
+  --success-foreground: #0D1A0B !important;
+  --warning: #E5B85C !important;
+  --warning-foreground: #1A1000 !important;
+  --info: #8981e5 !important;
+  --info-foreground: #1e1a46 !important;
+
+  /* Borders — template: rgba(153,156,179) = #999cb3 general; #4d4f63 for sidebar */
+  --border: #999cb3 !important;
+  --input: transparent !important;
+  --input-background: transparent !important;
+  --switch-background: #4d4f63 !important;
+  --ring: #8981e5 !important;
+
+  /* Charts — exact template values */
+  --chart-1: #8981e5 !important;  /* rgba(137,129,229) */
+  --chart-2: #aba3fb !important;  /* rgba(171,163,251) */
+  --chart-3: #75bf63 !important;  /* rgba(117,191,99) */
+  --chart-4: #ed5f56 !important;  /* rgba(237,95,86) */
+  --chart-5: #babcce !important;  /* rgba(186,188,206) */
+
+  /* Radius — template: 4px */
+  --radius: 0.25rem !important;
+
+  /* Sidebar — template exact values */
+  --sidebar: #2d2f3e !important;
+  --sidebar-foreground: #f8f8fb !important;
+  --sidebar-primary: #8981e5 !important;           /* active item bg */
+  --sidebar-primary-foreground: #1e1a46 !important; /* dark text on active */
+  --sidebar-accent: #8981e5 !important;            /* hover bg */
+  --sidebar-accent-foreground: #1e1a46 !important; /* dark text on hover */
+  --sidebar-border: #4d4f63 !important;            /* rgba(77,79,99) */
+  --sidebar-ring: #8981e5 !important;
+
+  /* Font weights — template light mode */
+  --font-weight-medium: 500 !important;
+  --font-weight-normal: 300 !important;
+
+  /* Surface elevations (AURA custom) */
+  --surface-0dp: #1e1f2a !important;
+  --surface-1dp: #242636 !important;
+  --surface-2dp: #292b3b !important;
+  --surface-3dp: #2d2f3e !important;
+  --surface-4dp: #333548 !important;
+  --surface-6dp: #383a4e !important;
+  --surface-8dp: #3d3f54 !important;
+  --surface-12dp: #424559 !important;
+  --surface-16dp: #474960 !important;
+  --surface-24dp: #4d4f63 !important;
+
+  /* EP1 semantic tokens */
+  --background-default: #1e1f2a !important;
+  --background-secondary: #1D2033 !important;
+  --background-inverse: #f8f8fb !important;
+  --surface-primary: #2d2f3e !important;
+  --surface-secondary: #323650 !important;
+  --surface-elevated: #343852 !important;
+
+  --brand-primary: #8981e5 !important;
+  --brand-primary-hover: #aba3fb !important;
+  --brand-primary-active: #7b74d4 !important;
+  --brand-secondary: #aba3fb !important;
+  --brand-secondary-hover: #c4beff !important;
+
+  --text-primary: #f8f8fb !important;
+  --text-secondary: #D7D9E6 !important;
+  --text-muted: #babcce !important;
+  --text-inverse: #1e1a46 !important;
+  --text-on-brand: #1e1a46 !important;
+
+  --border-default: #4d4f63 !important;
+  --border-subtle: #3a3e5c !important;
+  --border-focus: #8981e5 !important;
+
+  --status-success: #75bf63 !important;
+  --status-success-bg: #1A3318 !important;
+  --status-warning: #E5B85C !important;
+  --status-warning-bg: #33270D !important;
+  --status-error: #ed5f56 !important;
+  --status-error-bg: #33141A !important;
+  --status-info: #8981e5 !important;
+  --status-info-bg: #1e1a46 !important;
+
+  --table-header-bg: #30344B !important;
+  --table-header-text: #D7D9E6 !important;
+  --table-header-border: #4d4f63 !important;
+  --table-row-bg: #2E3248 !important;
+  --table-row-hover: #3A3E58 !important;
+  --table-row-selected: #3d3b6a !important;
+  --table-row-border: #3a3e5c !important;
+  --table-cell-text: #f8f8fb !important;
+  --table-cell-muted: #babcce !important;
+
+  --button-primary-bg: #8981e5 !important;
+  --button-primary-hover: #aba3fb !important;
+  --button-primary-active: #7b74d4 !important;
+  --button-primary-text: #1e1a46 !important;
+  --button-secondary-bg: transparent !important;
+  --button-secondary-hover: #8981e5 !important;
+  --button-secondary-active: #7b74d4 !important;
+  --button-secondary-text: #aba3fb !important;
+  --button-outline-border: #8981e5 !important;
+  --button-outline-hover-bg: #8981e5 !important;
+
+  --nav-background: #2d2f3e !important;
+  --nav-text: #f8f8fb !important;
+  --nav-text-muted: #babcce !important;
+  --nav-item-hover: #8981e5 !important;
+  --nav-item-active: #8981e5 !important;
+  --nav-border: #4d4f63 !important;
+
+  --form-label-text: #D7D9E6 !important;
+  --form-label-required: #ed5f56 !important;
+  --input-bg: transparent !important;
+  --input-border: #4d4f63 !important;
+  --input-border-hover: #999cb3 !important;
+  --input-border-focus: #8981e5 !important;
+  --input-text: #f8f8fb !important;
+  --input-placeholder: #babcce !important;
+  --input-disabled-bg: #252840 !important;
+  --input-disabled-text: #7C8098 !important;
+  --input-error-border: #ed5f56 !important;
+  --input-error-bg: rgba(237, 95, 86, 0.08) !important;
+
+  --link-default: #8981e5 !important;
+  --link-hover: #aba3fb !important;
+  --link-visited: #7b74d4 !important;
+  --link-active: #7b74d4 !important;
+
+  /* EP1 extended tokens */
+  --ep1-selected-bg: #8981e5;
+  --ep1-selected-border: #aba3fb;
+  --ep1-hover-bg: #8981e5;
+  --ep1-active-bg: #7b74d4;
+  --ep1-focus-ring: #8981e5;
+  --ep1-chip-bg: #4d4f63;
+  --ep1-chip-text: #f8f8fb;
+  --ep1-shadow-card: 0px 16px 16px 0px rgba(30,31,42,0.24), 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24), 0px 2px 2px 0px rgba(30,31,42,0.24);
+  --ep1-shadow-overlay: 0 12px 30px rgba(0, 0, 0, 0.32);
+  --ep1-panel-overlay: #343852;
+  --ep1-divider: #4d4f63;
+  --ep1-tooltip-bg: #4d4f63;
+  --ep1-tooltip-text: #f8f8fb;
+  --ep1-avatar-bg: #1e1f2a;
+}
+
+/* High-specificity override: html.dark.ep1 (specificity 0-2-1) beats both html.ep1
+   and html.dark. Prevents dark-theme's #121212 values from leaking into EP1.
+   Uses same values as the template's :root block (not .dark), because the Figma
+   hardcodes #1e1f2a/#2d2f3e as the intended surface colors. */
+html.dark.ep1 {
+  --background: #1e1f2a !important;
+  --foreground: #f8f8fb !important;
+  --card: #2d2f3e !important;
+  --card-foreground: #f8f8fb !important;
+  --popover: #2d2f3e !important;
+  --popover-foreground: #f8f8fb !important;
+  --primary: #8981e5 !important;
+  --primary-foreground: #1e1a46 !important;
+  --secondary: transparent !important;
+  --secondary-foreground: #aba3fb !important;
+  --muted: #2d2f3e !important;
+  --muted-foreground: #babcce !important;
+  --accent: #8981e5 !important;
+  --accent-foreground: #1e1a46 !important;
+  --destructive: #ed5f56 !important;
+  --destructive-foreground: #f8f8fb !important;
+  --border: #999cb3 !important;
+  --input: transparent !important;
+  --input-background: transparent !important;
+  --ring: #8981e5 !important;
+  --chart-1: #8981e5 !important;
+  --chart-2: #aba3fb !important;
+  --chart-3: #75bf63 !important;
+  --chart-4: #ed5f56 !important;
+  --chart-5: #babcce !important;
+  --sidebar: #2d2f3e !important;
+  --sidebar-foreground: #f8f8fb !important;
+  --sidebar-primary: #8981e5 !important;
+  --sidebar-primary-foreground: #1e1a46 !important;
+  --sidebar-accent: #8981e5 !important;
+  --sidebar-accent-foreground: #1e1a46 !important;
+  --sidebar-border: #4d4f63 !important;
+  --sidebar-ring: #8981e5 !important;
+  --font-weight-medium: 600 !important;
+  --font-weight-normal: 400 !important;
+  --radius: 0.25rem !important;
+}
+
+html.dark.ep1,
+html.dark.ep1 body {
+  background-color: #1e1f2a !important;
+  color: #f8f8fb !important;
+}
+
+/* --- EP1 App Background --- */
+html.ep1,
+html.ep1 body,
+body.ep1,
+html.ep1 #root,
+html.ep1 [data-slot="app"] {
+  background-color: #1e1f2a !important;
+}
+
+/* --- EP1 Cards & Panels — surface: #2d2f3e, border: #4d4f63, radius: 4px --- */
+.ep1 .card,
+.ep1 [data-slot="card"] {
+  background-color: #2d2f3e !important;
+  border: 1px solid #4d4f63 !important;
+  box-shadow: 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24), 0px 2px 2px 0px rgba(30,31,42,0.24) !important;
+  border-radius: 4px !important;
+}
+
+.ep1 .card:hover,
+.ep1 [data-slot="card"]:hover {
+  border-color: #999cb3 !important;
+  box-shadow: 0px 16px 16px 0px rgba(30,31,42,0.24), 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24) !important;
+}
+
+/* --- EP1 Sidebar — bg matches template Control Panel: bg-[#2d2f3e] --- */
+.ep1 .bg-sidebar,
+.ep1 [class*="bg-sidebar"] {
+  background-color: #2d2f3e !important;
+  border-right: none !important;
+}
+
+/* Active nav item — template: sidebar-primary = #8981e5, foreground = #1e1a46 */
+.ep1 [data-active="true"],
+.ep1 [aria-current="page"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* Hover nav item — template: sidebar-accent = #8981e5 */
+.ep1 [class*="sidebar"] a:hover,
+.ep1 [class*="sidebar"] button:hover {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* --- EP1 Header Bar — matches app bar: bg-[#2d2f3e] per template --- */
+.ep1 header,
+.ep1 [data-slot="header"],
+.ep1 nav[class*="top"],
+.ep1 .header {
+  background-color: #2d2f3e !important;
+  border-bottom: 1px solid #4d4f63 !important;
+  box-shadow: 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24) !important;
+}
+
+/* --- EP1 Tables --- */
+.ep1 table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ep1 thead,
+.ep1 thead tr {
+  background-color: #30344B !important;
+}
+
+.ep1 thead th {
+  color: #D7D9E6 !important;
+  background-color: #30344B !important;
+  border-bottom: 1px solid #4d4f63 !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+  text-transform: none !important;
+}
+
+.ep1 tbody tr {
+  background-color: #2E3248 !important;
+  border-bottom: 1px solid #3a3e5c !important;
+  transition: background-color 150ms ease !important;
+}
+
+.ep1 tbody tr:hover {
+  background-color: #3A3E58 !important;
+}
+
+.ep1 tbody tr[data-selected="true"],
+.ep1 tbody tr[aria-selected="true"] {
+  background-color: #474367 !important;
+}
+
+.ep1 tbody td {
+  color: #f8f8fb !important;
+  border-bottom: 1px solid #3a3e5c !important;
+}
+
+/* --- EP1 Inputs & Search — template: transparent bg, #4d4f63 border --- */
+.ep1 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.ep1 textarea,
+.ep1 select {
+  background-color: transparent !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+  border-radius: 4px !important;
+}
+
+.ep1 select option {
+  background-color: #2d2f3e !important;
+  color: #f8f8fb !important;
+}
+
+.ep1 input::placeholder,
+.ep1 textarea::placeholder {
+  color: #babcce !important;
+}
+
+.ep1 input:hover:not(:disabled),
+.ep1 textarea:hover:not(:disabled) {
+  border-color: #999cb3 !important;
+}
+
+.ep1 input:focus,
+.ep1 textarea:focus,
+.ep1 select:focus {
+  border-color: #8981e5 !important;
+  box-shadow: 0 0 0 3px rgba(137, 129, 229, 0.2) !important;
+  outline: none !important;
+}
+
+/* --- EP1 Buttons — template primary: #8981e5 bg, #1e1a46 text --- */
+.ep1 [data-slot="button"][class*="primary"],
+.ep1 button.bg-primary {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+  border-radius: 4px !important;
+}
+
+.ep1 [data-slot="button"][class*="primary"]:hover,
+.ep1 button.bg-primary:hover {
+  background-color: #aba3fb !important;
+}
+
+/* --- EP1 Tabs — flat underline style, no pill/card backgrounds --- */
+
+/* Strip the pill container background */
+.ep1 [data-slot="tabs-list"],
+.ep1 [role="tablist"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  border-bottom: 1px solid #4d4f63 !important;
+  height: auto !important;
+  gap: 0 !important;
+}
+
+/* Each tab: flat, no box */
+.ep1 [data-slot="tabs-trigger"],
+.ep1 [role="tab"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: #babcce !important;
+  padding: 8px 14px !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  border-bottom: 2px solid transparent !important;
+  margin-bottom: -1px !important;
+}
+
+/* Active tab: white text + template primary purple underline */
+.ep1 [data-slot="tabs-trigger"][data-state="active"],
+.ep1 [role="tab"][data-state="active"] {
+  background-color: transparent !important;
+  color: #f8f8fb !important;
+  border-bottom-color: #8981e5 !important;
+  box-shadow: none !important;
+}
+
+/* Hover on inactive tabs */
+.ep1 [data-slot="tabs-trigger"]:hover:not([data-state="active"]),
+.ep1 [role="tab"]:hover:not([data-state="active"]) {
+  color: #f8f8fb !important;
+  background-color: rgba(137, 129, 229, 0.12) !important;
+}
+
+/* --- EP1 Dropdowns & Popovers — template tooltip bg: #4d4f63 --- */
+.ep1 [data-radix-popper-content-wrapper],
+.ep1 [role="dialog"],
+.ep1 [role="menu"],
+.ep1 [role="listbox"] {
+  background-color: #2d2f3e !important;
+  border: 1px solid #4d4f63 !important;
+  box-shadow: 0px_8px_8px_0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24), 0px 2px 2px 0px rgba(30,31,42,0.24) !important;
+  border-radius: 4px !important;
+}
+
+/* --- EP1 Menu Items — template accent hover: #8981e5 --- */
+.ep1 [role="menuitem"]:hover,
+.ep1 [role="option"]:hover,
+.ep1 [data-highlighted] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+.ep1 [role="menuitem"][data-state="checked"],
+.ep1 [role="option"][aria-selected="true"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* --- EP1 Chips / Badges / Pills — template: #4d4f63 bg, #f8f8fb text --- */
+.ep1 [data-slot="badge"],
+.ep1 .badge,
+.ep1 [class*="chip"] {
+  background-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+  border: 1px solid #4d4f63 !important;
+  border-radius: 40px !important;  /* template --radius-chip: 40px */
+}
+
+/* --- EP1 Dividers / Borders --- */
+.ep1 [class*="border-b"],
+.ep1 [class*="border-t"],
+.ep1 hr,
+.ep1 [class*="separator"] {
+  border-color: #4d4f63 !important;
+}
+
+/* --- EP1 Interactive States --- */
+.ep1 .interactive-surface:hover {
+  background-color: #4d4f63 !important;
+}
+
+.ep1 .interactive-surface:focus {
+  background-color: #4B476D !important;
+  outline: 2px solid #B5A9FF !important;
+  outline-offset: 2px !important;
+}
+
+.ep1 .interactive-surface:active {
+  background-color: #4B476D !important;
+}
+
+/* --- EP1 Focus Ring — template ring: #8981e5 --- */
+.ep1 *:focus-visible {
+  outline: 2px solid #8981e5 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(137, 129, 229, 0.2) !important;
+}
+
+/* --- EP1 Modals — border-radius follows --radius: 4px --- */
+.ep1 [role="dialog"][data-state="open"] {
+  background-color: #2d2f3e !important;
+  border: 1px solid #4d4f63 !important;
+  box-shadow: 0px 16px 16px 0px rgba(30,31,42,0.24), 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24) !important;
+  border-radius: 4px !important;
+}
+
+.ep1 [data-slot="dialog-overlay"],
+.ep1 [class*="dialog-overlay"] {
+  background-color: rgba(10, 12, 22, 0.70) !important;
+}
+
+/* --- EP1 Status Colors --- */
+.ep1 .status-healthy {
+  color: #77D36A !important;
+}
+
+.ep1 .status-warning {
+  color: #E5B85C !important;
+}
+
+.ep1 .status-critical {
+  color: #E06A75 !important;
+}
+
+/* --- EP1 Empty States --- */
+.ep1 [class*="empty-state"],
+.ep1 [data-slot="empty"] {
+  color: #babcce !important;
+}
+
+/* --- EP1 Scrollbars — hidden like other themes --- */
+.ep1 ::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.ep1 * {
+  scrollbar-width: none !important;
+}
+
+/* ==========================================================================
+   EP1 REFINEMENTS — Sidebar, Cards, Badges, Buttons, Content
+   ========================================================================== */
+
+/* --- Sidebar nav items: flat/transparent by default, no box --- */
+.ep1 nav button,
+.ep1 nav a,
+.ep1 [class*="sidebar"] button:not([class*="bg-sidebar-primary"]),
+.ep1 [class*="sidebar"] a:not([class*="bg-sidebar-primary"]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Active sidebar item — template sidebar-primary: #8981e5, foreground: #1e1a46 */
+.ep1 button[class*="bg-sidebar-primary"],
+.ep1 a[class*="bg-sidebar-primary"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+  border-radius: 4px !important;
+}
+
+/* Hover state — template sidebar-accent: #8981e5 */
+.ep1 nav button:hover:not([class*="bg-sidebar-primary"]),
+.ep1 nav a:hover:not([class*="bg-sidebar-primary"]),
+.ep1 button[class*="hover:bg-sidebar-accent"]:hover {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* --- SANDBOX / beta badge: EP1 chip style — #4d4f63 bg, muted text --- */
+.ep1 span[class*="bg-amber-500"] {
+  background-color: #4d4f63 !important;
+  color: #babcce !important;
+}
+.ep1 span[class*="text-amber-500"] {
+  color: #babcce !important;
+}
+
+/* --- Site group status dots: keep semantic colors but soften --- */
+.ep1 span[class*="bg-green-500"] {
+  background-color: #77D36A !important;
+}
+.ep1 span[class*="bg-red-500"] {
+  background-color: #E06A75 !important;
+}
+
+/* --- Sidebar: floating card style — all themes --- */
+.bg-sidebar {
+  border-right: none !important;
+  border-radius: 8px !important;
+}
+
+.ep1 .bg-sidebar {
+  box-shadow: 0px 16px 16px 0px rgba(30,31,42,0.24), 0px 8px 8px 0px rgba(30,31,42,0.24), 0px 4px 4px 0px rgba(30,31,42,0.24), 0px 2px 2px 0px rgba(30,31,42,0.24) !important;
+}
+
+:not(.ep1) .bg-sidebar {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+}
+
+/* --- Clear all hardcoded gradient backgrounds on cards --- */
+.ep1 .card[class*="from-"],
+.ep1 [data-slot="card"][class*="from-"] {
+  background: #2d2f3e !important;
+  background-image: none !important;
+}
+
+/* Also clear gradients on any element inside .ep1 */
+.ep1 [class*="bg-gradient-to-"] {
+  background-image: none !important;
+  background-color: #2d2f3e !important;
+}
+
+/* --- Override hardcoded Tailwind border colors on cards — template border: #4d4f63 --- */
+.ep1 .card[class*="border-blue-"],
+.ep1 .card[class*="border-violet-"],
+.ep1 .card[class*="border-emerald-"],
+.ep1 .card[class*="border-amber-"],
+.ep1 .card[class*="border-green-"],
+.ep1 .card[class*="border-red-"],
+.ep1 .card[class*="border-orange-"] {
+  border-color: #4d4f63 !important;
+}
+
+/* --- Teal info/status boxes (dark: variants fire because EP1 has .dark) --- */
+.ep1 [class*="bg-teal-"] {
+  background-color: rgba(137, 129, 229, 0.15) !important;
+}
+.ep1 [class*="border-teal-"] {
+  border-color: #4d4f63 !important;
+}
+.ep1 [class*="text-teal-"] {
+  color: #8981e5 !important;
+}
+
+/* --- Secondary buttons — template: transparent bg, #aba3fb text --- */
+.ep1 button[class*="bg-secondary"],
+.ep1 [data-slot="button"][class*="secondary"] {
+  background-color: transparent !important;
+  color: #aba3fb !important;
+  border: 1px solid #4d4f63 !important;
+  border-radius: 4px !important;
+}
+.ep1 button[class*="bg-secondary"]:hover {
+  background-color: #4d4f63 !important;
+}
+
+/* --- Page title in top bar (hardcoded rgba white) --- */
+.ep1 h2[class*="text-\[rgba"] {
+  color: #f8f8fb !important;
+}
+
+/* --- Stat numbers inside cards --- */
+.ep1 .card .text-2xl,
+.ep1 .card .text-3xl,
+.ep1 .card .text-4xl {
+  color: #f8f8fb !important;
+}
+
+/* --- Muted sub-text in cards --- */
+.ep1 .card .text-muted-foreground {
+  color: #babcce !important;
+}
+
+/* --- Progress bars — template primary: #8981e5 --- */
+.ep1 [class*="bg-primary"][style*="width"],
+.ep1 [role="progressbar"] > div {
+  background-color: #8981e5 !important;
+}
+
+/* --- Dividers in sidebar and content — template sidebar-border: #4d4f63 --- */
+.ep1 [data-slot="separator"],
+.ep1 .separator {
+  background-color: #4d4f63 !important;
+}
+
+/* --- Dropdown trigger buttons — template: transparent bg, #4d4f63 border --- */
+.ep1 [data-slot="select-trigger"],
+.ep1 button[role="combobox"] {
+  background-color: transparent !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+  border-radius: 4px !important;
+}
+.ep1 [data-slot="select-trigger"]:hover,
+.ep1 button[role="combobox"]:hover {
+  background-color: rgba(137, 129, 229, 0.12) !important;
+  border-color: #999cb3 !important;
+}
+
+/* --- Select dropdown content --- */
+.ep1 [data-slot="select-content"],
+.ep1 [role="listbox"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+}
+
+/* --- Select items — template accent hover: #8981e5 --- */
+.ep1 [data-slot="select-item"]:hover,
+.ep1 [data-slot="select-item"][data-highlighted],
+.ep1 [role="option"]:hover {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* --- App shell main area background — same surface as sidebar/top bar (#2d2f3e) --- */
+.ep1 main {
+  background-color: #2d2f3e !important;
+}
+.ep1 .flex-1.overflow-auto {
+  background-color: #2d2f3e !important;
+}
+
+/* --- EP1 Alert/info banners — prevent dark-mode #121212 bleed --- */
+.ep1 [data-slot="alert"],
+.ep1 [role="alert"] {
+  background-color: #2d2f3e !important;
+  border-color: #3a3e5c !important;
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="alert-description"] {
+  color: #babcce !important;
+}
+
+/* --- EP1 Select: ensure text is always visible --- */
+.ep1 [data-slot="select-trigger"],
+.ep1 [data-slot="select-value"],
+.ep1 [data-slot="select-item"] {
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="select-item"][data-state="checked"],
+.ep1 [data-slot="select-item"][aria-selected="true"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+
+/* --- EP1 Sidebar buttons: transparent at rest, no dark-mode box artifacts --- */
+.ep1 .bg-sidebar [data-slot="button"]:not([class*="bg-sidebar-primary"]):not([class*="bg-primary"]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* --- EP1 Secondary surfaces: prevent #121212 bleed from dark theme ---
+   Template: secondary=transparent, muted=transparent (we keep #2d2f3e for tables) */
+.ep1 [class*="bg-muted"]:not([class*="text"]) {
+  background-color: #2d2f3e !important;
+}
+.ep1 [class*="bg-input"],
+.ep1 [class*="dark:bg-input"] {
+  background-color: transparent !important;
+}
+
+/* ============================================================
+   EP1 COMPONENT VISIBILITY OVERRIDES
+   Fixes all dark-mode contrast/visibility issues across menus,
+   filters, inputs, tabs, badges, and selects.
+   ============================================================ */
+
+/* --- Inputs, Textareas, Search bars --- */
+.ep1 [data-slot="input"],
+.ep1 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.ep1 textarea,
+.ep1 [class*="input"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 input::placeholder,
+.ep1 textarea::placeholder {
+  color: #babcce !important;
+}
+
+/* --- Select Trigger: was transparent, needs visible surface --- */
+.ep1 [data-slot="select-trigger"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="select-trigger"]:hover {
+  background-color: #333548 !important;
+  border-color: #999cb3 !important;
+}
+
+/* --- Select Content (dropdown panel) --- */
+.ep1 [data-slot="select-content"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="select-item"] {
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="select-item"]:focus,
+.ep1 [data-slot="select-item"][data-highlighted] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+.ep1 [data-slot="select-label"] {
+  color: #babcce !important;
+}
+
+/* --- Dropdown Menu --- */
+.ep1 [data-slot="dropdown-menu-content"],
+.ep1 [role="menu"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 [role="menuitem"],
+.ep1 [data-slot="dropdown-menu-item"] {
+  color: #f8f8fb !important;
+}
+.ep1 [role="menuitem"]:focus,
+.ep1 [role="menuitem"][data-highlighted],
+.ep1 [data-slot="dropdown-menu-item"]:focus {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+.ep1 [data-slot="dropdown-menu-separator"] {
+  background-color: #4d4f63 !important;
+}
+.ep1 [data-slot="dropdown-menu-label"] {
+  color: #babcce !important;
+}
+
+/* --- Tabs: TabsList and TabsTrigger --- */
+.ep1 [data-slot="tabs-list"] {
+  background-color: #2d2f3e !important;
+  border: 1px solid #4d4f63 !important;
+}
+.ep1 [data-slot="tabs-trigger"] {
+  color: #babcce !important;
+}
+.ep1 [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+  border-color: transparent !important;
+}
+.ep1 [data-slot="tabs-trigger"]:hover:not([data-state="active"]) {
+  color: #f8f8fb !important;
+  background-color: #333548 !important;
+}
+
+/* --- Popover Content (UserMenu, datepickers, etc.) --- */
+.ep1 [data-slot="popover-content"],
+.ep1 [data-radix-popper-content-wrapper] > div {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+
+/* --- Dialog / Modal --- */
+.ep1 [data-slot="dialog-content"],
+.ep1 [role="dialog"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="dialog-title"],
+.ep1 [data-slot="dialog-description"] {
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="dialog-description"] {
+  color: #babcce !important;
+}
+
+/* --- Alert Dialog --- */
+.ep1 [data-slot="alert-dialog-content"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+
+/* --- Sheet (side panels) --- */
+.ep1 [data-slot="sheet-content"] {
+  background-color: #2d2f3e !important;
+  border-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+
+/* --- Command Palette (search bars with comboboxes) --- */
+.ep1 [data-slot="command"],
+.ep1 [cmdk-root] {
+  background-color: #2d2f3e !important;
+  color: #f8f8fb !important;
+}
+.ep1 [cmdk-input] {
+  background-color: transparent !important;
+  color: #f8f8fb !important;
+}
+.ep1 [cmdk-item] {
+  color: #f8f8fb !important;
+}
+.ep1 [cmdk-item][data-selected="true"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+.ep1 [cmdk-group-heading] {
+  color: #babcce !important;
+}
+.ep1 [cmdk-empty] {
+  color: #babcce !important;
+}
+
+/* --- Tooltip --- */
+.ep1 [data-slot="tooltip-content"],
+.ep1 [role="tooltip"] {
+  background-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+  border-color: #4d4f63 !important;
+}
+
+/* --- Badges in dark mode: ensure readable text --- */
+.ep1 [data-slot="badge"] {
+  color: #f8f8fb;
+}
+.ep1 [data-slot="badge"][class*="bg-primary"] {
+  background-color: #8981e5 !important;
+  color: #1e1a46 !important;
+}
+.ep1 [data-slot="badge"][class*="bg-secondary"] {
+  background-color: #4d4f63 !important;
+  color: #f8f8fb !important;
+}
+.ep1 [data-slot="badge"][class*="outline"] {
+  border-color: #4d4f63 !important;
+  color: #babcce !important;
+}
+
+/* --- Table header/rows: already covered by vars but reinforce --- */
+.ep1 thead th,
+.ep1 [data-slot="table-head"] {
+  background-color: #30344B !important;
+  color: #D7D9E6 !important;
+  border-color: #4d4f63 !important;
+}
+.ep1 tbody td,
+.ep1 [data-slot="table-cell"] {
+  color: #f8f8fb !important;
+  border-color: #3a3e5c !important;
+}
+.ep1 tbody tr:hover td {
+  background-color: #3A3E58 !important;
+}
+
+/* --- Scrollbars --- */
+.ep1 ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ep1 ::-webkit-scrollbar-track {
+  background: #1e1f2a;
+}
+.ep1 ::-webkit-scrollbar-thumb {
+  background: #4d4f63;
+  border-radius: 3px;
+}
+.ep1 ::-webkit-scrollbar-thumb:hover {
+  background: #8981e5;
+}
+
+/* --- Muted text legibility — ensure all muted text is visible --- */
+.ep1 .text-muted-foreground,
+.ep1 [class*="text-muted"] {
+  color: #babcce !important;
+}
+
+/* --- Gray utility classes — override any hardcoded grays --- */
+.ep1 .bg-gray-50, .ep1 .bg-gray-100, .ep1 .bg-gray-200 { background-color: #2d2f3e !important; }
+.ep1 .bg-gray-300, .ep1 .bg-gray-400 { background-color: #3a3e5c !important; }
+.ep1 .bg-gray-500 { background-color: #4d4f63 !important; }
+.ep1 .bg-white { background-color: #2d2f3e !important; }
+.ep1 .text-gray-400, .ep1 .text-gray-500 { color: #babcce !important; }
+.ep1 .text-gray-600, .ep1 .text-gray-700 { color: #D7D9E6 !important; }
+.ep1 .text-gray-800, .ep1 .text-gray-900, .ep1 .text-black { color: #f8f8fb !important; }
+.ep1 .border-gray-200, .ep1 .border-gray-300 { border-color: #4d4f63 !important; }
+
+/* --- Zinc / Slate utility overrides --- */
+.ep1 .bg-zinc-50, .ep1 .bg-zinc-100 { background-color: #2d2f3e !important; }
+.ep1 .bg-zinc-800, .ep1 .bg-zinc-900 { background-color: #1e1f2a !important; }
+.ep1 .bg-slate-50, .ep1 .bg-slate-100 { background-color: #2d2f3e !important; }
+.ep1 .text-zinc-500, .ep1 .text-slate-500 { color: #babcce !important; }
+.ep1 .text-zinc-900, .ep1 .text-slate-900 { color: #f8f8fb !important; }
+
+/* ============================================================
+   DEV THEME — OS-ONE Material Design Dark (#121212 base)
+   Primary: #BB86FC  Secondary: #03DAC5  Radius: 4px
+   ============================================================ */
+
+html.dev,
+html[data-theme="dev"],
+body.dev {
+  --background: #121212 !important;
+  --foreground: rgba(255,255,255,0.87) !important;
+  --card: #1d1d1d !important;
+  --card-foreground: rgba(255,255,255,0.87) !important;
+  --popover: #212121 !important;
+  --popover-foreground: rgba(255,255,255,0.87) !important;
+
+  --primary: #BB86FC !important;
+  --primary-foreground: rgba(0,0,0,0.87) !important;
+
+  --secondary: #03DAC5 !important;
+  --secondary-foreground: rgba(0,0,0,0.87) !important;
+
+  --muted: #1d1d1d !important;
+  --muted-foreground: rgba(255,255,255,0.60) !important;
+
+  --accent: #BB86FC !important;
+  --accent-foreground: rgba(0,0,0,0.87) !important;
+
+  --destructive: #CF6679 !important;
+  --destructive-foreground: rgba(0,0,0,0.87) !important;
+
+  --success: #81C784 !important;
+  --warning: #FFB74D !important;
+  --info: #03DAC5 !important;
+
+  --border: rgba(255,255,255,0.12) !important;
+  --input: rgba(255,255,255,0.05) !important;
+  --ring: #BB86FC !important;
+  --radius: 0.25rem !important;
+
+  --chart-1: #BB86FC !important;
+  --chart-2: #03DAC5 !important;
+  --chart-3: #FFB74D !important;
+  --chart-4: #CF6679 !important;
+  --chart-5: #81C784 !important;
+
+  --sidebar: #1d1d1d !important;
+  --sidebar-foreground: rgba(255,255,255,0.87) !important;
+  --sidebar-primary: #BB86FC !important;
+  --sidebar-primary-foreground: rgba(0,0,0,0.87) !important;
+  --sidebar-accent: rgba(187,134,252,0.16) !important;
+  --sidebar-accent-foreground: rgba(255,255,255,0.87) !important;
+  --sidebar-border: rgba(255,255,255,0.12) !important;
+  --sidebar-ring: #BB86FC !important;
+
+  --surface-0dp: #121212 !important;
+  --surface-1dp: #1d1d1d !important;
+  --surface-2dp: #212121 !important;
+  --surface-3dp: #242424 !important;
+  --surface-4dp: #272727 !important;
+  --surface-6dp: #2c2c2c !important;
+  --surface-8dp: #2e2e2e !important;
+  --surface-12dp: #333333 !important;
+  --surface-16dp: #363636 !important;
+  --surface-24dp: #383838 !important;
+}
+
+html.dev,
+html.dev body,
+body.dev,
+html.dev #root {
+  background-color: #121212 !important;
+}
+
+/* Dev Cards & Panels */
+.dev .card,
+.dev [data-slot="card"] {
+  background-color: #1d1d1d !important;
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5) !important;
+}
+
+/* Dev Sidebar */
+.dev .bg-sidebar,
+.dev [class*="bg-sidebar"] {
+  background-color: #1d1d1d !important;
+}
+
+/* Active nav item */
+.dev [data-active="true"],
+.dev [aria-current="page"] {
+  background-color: #BB86FC !important;
+  color: rgba(0,0,0,0.87) !important;
+}
+
+/* Hover nav item */
+.dev [class*="sidebar"] button:hover {
+  background-color: rgba(187,134,252,0.16) !important;
+  color: #BB86FC !important;
+}
+
+/* Dev buttons: sidebar transparent at rest */
+.dev .bg-sidebar [data-slot="button"]:not([class*="bg-sidebar-primary"]):not([class*="bg-primary"]) {
+  background-color: transparent !important;
+  box-shadow: none !important;
 }

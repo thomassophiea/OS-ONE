@@ -14,17 +14,36 @@ export interface BrandConfig {
 }
 
 export const branding: Record<ThemeMode, BrandConfig> = {
+  dev: {
+    name: 'AURA',
+    fullName: 'AURA Mobility Core',
+    tagline: 'Autonomous Unified Radio Agent',
+    logo: '/logo.svg',
+    icon: '/favicon.ico'
+  },
   default: {
-    name: 'API',
-    fullName: 'API | Integration ONE',
-    tagline: 'Autonomous Platform Intelligence',
+    name: 'AURA',
+    fullName: 'AURA Mobility Core',
+    tagline: 'Autonomous Unified Radio Agent',
     logo: '/logo.svg',
     icon: '/favicon.ico'
   },
   dark: {
-    name: 'API',
-    fullName: 'API | Integration ONE',
-    tagline: 'Autonomous Platform Intelligence',
+    name: 'AURA',
+    fullName: 'AURA Mobility Core',
+    tagline: 'Autonomous Unified Radio Agent',
+    logo: '/logo.svg',
+    icon: '/favicon.ico'
+  },
+  ep1: {
+    name: 'AURA',
+    fullName: 'AURA Mobility Core',
+    tagline: 'Autonomous Unified Radio Agent',
+    // NOTE: No EP1 logo asset exists yet.
+    // To add EP1-specific branding, add assets at:
+    //   public/branding/ep1/logo.svg
+    //   public/branding/ep1/icon.png
+    // and update these paths accordingly.
     logo: '/logo.svg',
     icon: '/favicon.ico'
   }
@@ -50,19 +69,26 @@ export function useBranding(): BrandConfig {
   });
 
   useEffect(() => {
-    // Listen for theme changes
     const handleThemeChange = () => {
+      // Read from both keys; aura-theme-preference is authoritative
+      const preferred = localStorage.getItem('aura-theme-preference');
+      const legacy = localStorage.getItem('theme');
+      const raw = preferred || legacy || 'default';
       const theme = getStoredTheme();
-      setCurrentBranding(getBranding(theme));
+      // If preferred key holds a recognized ThemeMode use that, else fall back
+      const resolvedTheme: ThemeMode =
+        raw === 'ep1' ? 'ep1' :
+        raw === 'dev' ? 'dev' :
+        raw === 'dark' ? 'dark' :
+        'default';
+      setCurrentBranding(getBranding(resolvedTheme));
     };
 
-    // Listen for storage changes (theme updates from other tabs)
     window.addEventListener('storage', handleThemeChange);
 
-    // Also listen for manual theme changes in same tab
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
+        if (mutation.attributeName === 'class' || mutation.attributeName === 'data-theme') {
           handleThemeChange();
         }
       });
@@ -70,7 +96,7 @@ export function useBranding(): BrandConfig {
 
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class']
+      attributeFilter: ['class', 'data-theme']
     });
 
     return () => {
