@@ -95,36 +95,37 @@ interface AppInsightsData {
   worstAppGroupsByThroughputReport: AppGroupReport[];
 }
 
-// Modern color palette for charts - VIBRANT colors with excellent contrast for dark mode
+// Chart color palette — works across dark, light, and dev themes
+// Uses mid-saturation values that read well on both white and dark surfaces
 const CHART_COLORS = [
-  '#818cf8', // Indigo 400 - brighter
-  '#a78bfa', // Violet 400 - brighter
-  '#f472b6', // Pink 400 - brighter
-  '#2dd4bf', // Teal 400 - brighter
-  '#fb923c', // Orange 400 - brighter
-  '#facc15', // Yellow 400 - brighter
-  '#4ade80', // Green 400 - brighter
-  '#22d3ee', // Cyan 400 - brighter
-  '#60a5fa', // Blue 400 - brighter
-  '#c084fc', // Purple 400 - brighter
+  '#7c6fcd', // Indigo — readable on light + dark
+  '#9066e0', // Violet
+  '#d6568f', // Pink
+  '#0d9488', // Teal 600 — deeper for light mode readability
+  '#ea7025', // Orange
+  '#c9a009', // Yellow/gold — darker for light readability
+  '#16a34a', // Green 600
+  '#0891b2', // Cyan 600
+  '#2563eb', // Blue 600
+  '#9333ea', // Purple 600
 ];
 
-// Category color mapping - VIBRANT, distinct colors for dark mode with excellent readability
+// Category color mapping — mid-saturation for cross-theme readability
 const CATEGORY_COLORS: Record<string, string> = {
-  streaming: '#f472b6',      // Pink 400 - entertainment
-  storage: '#60a5fa',        // Blue 400 - data/storage
-  cloud: '#22d3ee',          // Cyan 400 - cloud services
-  social: '#a78bfa',         // Violet 400 - social
-  gaming: '#fb923c',         // Orange 400 - gaming
-  web: '#4ade80',            // Green 400 - web
-  search: '#facc15',         // Yellow 400 - search
-  communication: '#818cf8',  // Indigo 400 - comms
-  business: '#2dd4bf',       // Teal 400 - business
-  security: '#f87171',       // Red 400 - security
-  realtime: '#c084fc',       // Purple 400 - realtime
-  corporate: '#94a3b8',      // Slate 400 - corporate
-  content: '#38bdf8',        // Sky 400 - content
-  applications: '#34d399',   // Emerald 400 - apps
+  streaming: '#d6568f',      // Pink — entertainment
+  storage: '#2563eb',        // Blue 600 — data/storage
+  cloud: '#0891b2',          // Cyan 600 — cloud services
+  social: '#9066e0',         // Violet — social
+  gaming: '#ea7025',         // Orange — gaming
+  web: '#16a34a',            // Green 600 — web
+  search: '#c9a009',         // Gold — search
+  communication: '#7c6fcd',  // Indigo — comms
+  business: '#0d9488',       // Teal 600 — business
+  security: '#dc2626',       // Red 600 — security
+  realtime: '#9333ea',       // Purple 600 — realtime
+  corporate: '#64748b',      // Slate 500 — corporate
+  content: '#0284c7',        // Sky 600 — content
+  applications: '#059669',   // Emerald 600 — apps
 };
 
 const getCategoryColor = (category: string, index: number): string => {
@@ -319,7 +320,7 @@ export function AppInsights({ api }: AppInsightsProps) {
               <div className={`p-1.5 rounded ${color} shadow-sm group-hover:shadow-md group-hover:scale-110 transition-all`}>
                 <Icon className="h-3.5 w-3.5 text-white" />
               </div>
-              <CardTitle className="text-xs font-semibold text-slate-200">{title}</CardTitle>
+              <CardTitle className="text-xs font-semibold text-foreground">{title}</CardTitle>
             </div>
             <SaveToWorkspace
               widgetId={widgetId}
@@ -335,8 +336,8 @@ export function AppInsights({ api }: AppInsightsProps) {
           {/* Top Categories */}
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 mb-1">
-              <ChevronUp className="h-3 w-3 text-emerald-400" />
-              <span className="text-[10px] font-medium text-slate-400">Top Performers</span>
+              <ChevronUp className="h-3 w-3 text-[color:var(--status-success)]" />
+              <span className="text-[10px] font-medium text-muted-foreground">Top Performers</span>
             </div>
             {topData.slice(0, 5).map((item: any, index: number) => {
               const percentage = maxTop > 0 ? (item.value / maxTop) * 100 : 0;
@@ -355,12 +356,12 @@ export function AppInsights({ api }: AppInsightsProps) {
                     >
                       <CategoryIcon className="h-3 w-3" style={{ color: itemColor }} />
                     </div>
-                    <span className="text-xs font-medium truncate flex-1 text-slate-200" title={item.name}>
+                    <span className="text-xs font-medium truncate flex-1 text-foreground" title={item.name}>
                       {item.name}
                     </span>
                     <span className="text-xs font-bold tabular-nums" style={{ color: itemColor }}>{formatValue(item.value)}</span>
                   </div>
-                  <div className="h-1.5 bg-slate-800/40 rounded-full overflow-hidden ml-6">
+                  <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden ml-6">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%`, backgroundColor: itemColor }}
@@ -374,8 +375,8 @@ export function AppInsights({ api }: AppInsightsProps) {
           {/* Bottom Categories */}
           <div className="space-y-1.5 pt-2 border-t border-border/50">
             <div className="flex items-center gap-1.5 mb-1">
-              <ChevronDown className="h-3 w-3 text-amber-400" />
-              <span className="text-[10px] font-medium text-slate-500">Low Activity</span>
+              <ChevronDown className="h-3 w-3 text-[color:var(--warning)]" />
+              <span className="text-[10px] font-medium text-muted-foreground">Low Activity</span>
             </div>
             {bottomData.slice(0, 5).map((item: any, index: number) => {
               const percentage = maxBottom > 0 ? (item.value / maxBottom) * 100 : 0;
@@ -394,12 +395,12 @@ export function AppInsights({ api }: AppInsightsProps) {
                     >
                       <CategoryIcon className="h-3 w-3" style={{ color: itemColor }} />
                     </div>
-                    <span className="text-xs font-medium truncate flex-1 text-slate-400" title={item.name}>
+                    <span className="text-xs font-medium truncate flex-1 text-muted-foreground" title={item.name}>
                       {item.name}
                     </span>
-                    <span className="text-xs tabular-nums text-slate-400">{formatValue(item.value)}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{formatValue(item.value)}</span>
                   </div>
-                  <div className="h-1 bg-slate-800/30 rounded-full overflow-hidden ml-6">
+                  <div className="h-1 bg-muted/50 rounded-full overflow-hidden ml-6">
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{ width: `${percentage}%`, backgroundColor: `${itemColor}80` }}
@@ -456,23 +457,22 @@ export function AppInsights({ api }: AppInsightsProps) {
   return (
     <div className="p-4 space-y-3">
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 border border-violet-500/20 backdrop-blur-sm overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 opacity-5 animate-pulse" />
-        <div className="absolute -right-10 -top-10 w-32 h-32 bg-violet-500/20 rounded-full blur-3xl" />
-        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-fuchsia-500/20 rounded-full blur-3xl" />
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20 overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl" />
+        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl" />
 
         <div className="flex items-center gap-2.5 relative z-10">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 shadow-lg shadow-violet-500/50 animate-pulse">
-            <AppWindow className="h-5 w-5 text-white" />
+          <div className="p-2 rounded-lg bg-primary shadow-sm">
+            <AppWindow className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">
+            <h1 className="text-xl font-bold tracking-tight text-foreground">
               App Insights
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Application visibility and traffic analytics
               {selectedSite !== 'all' && (
-                <span className="ml-1 text-violet-400 font-medium">
+                <span className="ml-1 text-primary font-medium">
                   • {sites.find(s => s.id === selectedSite)?.name || selectedSite}
                 </span>
               )}
@@ -524,12 +524,12 @@ export function AppInsights({ api }: AppInsightsProps) {
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     Total Data
-                    <TrendingUp className="h-3 w-3 text-emerald-400" />
+                    <TrendingUp className="h-3 w-3 text-[color:var(--status-success)]" />
                   </p>
-                  <p className="text-lg font-bold text-cyan-400">{formatBytes(stats.totalUsage)}</p>
-                  <p className="text-[10px] text-slate-500">{stats.totalCategories} categories</p>
+                  <p className="text-lg font-bold" style={{ color: 'var(--chart-2)' }}>{formatBytes(stats.totalUsage)}</p>
+                  <p className="text-[10px] text-muted-foreground">{stats.totalCategories} categories</p>
                 </div>
                 <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
                   <HardDrive className="h-3.5 w-3.5 text-white" />
@@ -544,12 +544,12 @@ export function AppInsights({ api }: AppInsightsProps) {
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     Throughput
-                    <Activity className="h-3 w-3 text-emerald-400 animate-pulse" />
+                    <Activity className="h-3 w-3 text-[color:var(--status-success)] animate-pulse" />
                   </p>
-                  <p className="text-lg font-bold text-emerald-400">{formatThroughput(stats.totalThroughput)}</p>
-                  <p className="text-[10px] text-slate-500">Avg bandwidth</p>
+                  <p className="text-lg font-bold" style={{ color: 'var(--chart-5)' }}>{formatThroughput(stats.totalThroughput)}</p>
+                  <p className="text-[10px] text-muted-foreground">Avg bandwidth</p>
                 </div>
                 <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md group-hover:scale-110 transition-transform">
                   <Gauge className="h-3.5 w-3.5 text-white" />
@@ -564,12 +564,12 @@ export function AppInsights({ api }: AppInsightsProps) {
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     Active Clients
-                    <ArrowUpRight className="h-3 w-3 text-violet-400" />
+                    <ArrowUpRight className="h-3 w-3 text-primary" />
                   </p>
-                  <p className="text-lg font-bold text-violet-400">{formatNumber(stats.totalClients)}</p>
-                  <p className="text-[10px] text-slate-500">Using apps</p>
+                  <p className="text-lg font-bold text-primary">{formatNumber(stats.totalClients)}</p>
+                  <p className="text-[10px] text-muted-foreground">Using apps</p>
                 </div>
                 <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md group-hover:scale-110 transition-transform">
                   <Users className="h-3.5 w-3.5 text-white" />
@@ -584,12 +584,12 @@ export function AppInsights({ api }: AppInsightsProps) {
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
                 <div className="space-y-0.5">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     Top Category
-                    <Sparkles className="h-3 w-3 text-amber-400" />
+                    <Sparkles className="h-3 w-3 text-[color:var(--warning)]" />
                   </p>
-                  <p className="text-base font-bold truncate text-amber-400">{stats.topCategory}</p>
-                  <p className="text-[10px] text-slate-500">{stats.topCategoryPercent}% of traffic</p>
+                  <p className="text-base font-bold truncate" style={{ color: 'var(--chart-3)' }}>{stats.topCategory}</p>
+                  <p className="text-[10px] text-muted-foreground">{stats.topCategoryPercent}% of traffic</p>
                 </div>
                 <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md group-hover:scale-110 transition-transform">
                   <Zap className="h-3.5 w-3.5 text-white" />
@@ -606,14 +606,14 @@ export function AppInsights({ api }: AppInsightsProps) {
           <CardContent className="py-2 px-3">
             <div className="flex items-start gap-2">
               <div className="p-1 rounded bg-primary/10">
-                <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide mb-0.5">Quick Insights</p>
+                <p className="text-[10px] font-semibold text-primary uppercase tracking-wide mb-0.5">Quick Insights</p>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                   {insights.map((insight, i) => (
-                    <p key={i} className="text-xs text-slate-300 flex items-center gap-1">
-                      <Info className="h-3 w-3 text-violet-400" />
+                    <p key={i} className="text-xs text-foreground/80 flex items-center gap-1">
+                      <Info className="h-3 w-3 text-primary" />
                       {insight.text}
                     </p>
                   ))}
@@ -627,12 +627,12 @@ export function AppInsights({ api }: AppInsightsProps) {
       {/* Category Distribution Visualizations */}
       {chartData && stats && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-          {/* Top Categories Donut Chart */}
+          {/* Top Categories Donut Chart — no external labels (avoids overlap); legend below */}
           <Card className="border-border/50">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-200">
-                  <PieChart className="h-4 w-4 text-violet-400" />
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <PieChart className="h-4 w-4 text-primary" />
                   Top Categories by Usage
                 </CardTitle>
                 <SaveToWorkspace
@@ -645,75 +645,74 @@ export function AppInsights({ api }: AppInsightsProps) {
                 />
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="h-64">
+            <CardContent className="pb-3">
+              {/* Donut — compact height, labels removed to prevent overlap */}
+              <div className="h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPieChart>
                     <Pie
                       data={chartData.topUsage.slice(0, 6)}
                       cx="50%"
                       cy="50%"
-                      innerRadius={65}
-                      outerRadius={95}
-                      paddingAngle={2}
+                      innerRadius={50}
+                      outerRadius={78}
+                      paddingAngle={3}
                       dataKey="value"
-                      label={({ name, cx, cy, midAngle, outerRadius }) => {
-                        const RADIAN = Math.PI / 180;
-                        const radius = outerRadius + 25;
-                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                        const displayName = name.length > 15 ? name.substring(0, 15) + '...' : name;
-
-                        return (
-                          <text
-                            x={x}
-                            y={y}
-                            fill="#e2e8f0"
-                            textAnchor={x > cx ? 'start' : 'end'}
-                            dominantBaseline="central"
-                            fontSize={12}
-                            fontWeight={500}
-                            style={{
-                              paintOrder: 'stroke',
-                              stroke: '#0f172a',
-                              strokeWidth: 3,
-                              strokeLinecap: 'round',
-                              strokeLinejoin: 'round'
-                            }}
-                          >
-                            {displayName}
-                          </text>
-                        );
-                      }}
-                      labelLine={{ stroke: '#64748b', strokeWidth: 1 }}
+                      isAnimationActive={true}
                     >
                       {chartData.topUsage.slice(0, 6).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={getCategoryColor(entry.name, index)} />
+                        <Cell key={`cell-${index}`} fill={getCategoryColor(entry.name, index)} stroke="transparent" />
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => formatBytes(value)}
-                      labelFormatter={() => ''}
+                      formatter={(value: number, name: string) => [formatBytes(value), name]}
                       contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
+                        backgroundColor: 'var(--popover)',
+                        border: '1px solid var(--border)',
                         borderRadius: '8px',
                         fontSize: '12px',
-                        color: '#f1f5f9'
+                        color: 'var(--popover-foreground)',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.25)'
                       }}
                     />
                   </RechartsPieChart>
                 </ResponsiveContainer>
               </div>
+              {/* Legend grid — two columns, no overlap possible */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 px-1">
+                {chartData.topUsage.slice(0, 6).map((entry, index) => {
+                  const color = getCategoryColor(entry.name, index);
+                  const pct = stats.totalUsage > 0
+                    ? ((entry.value / stats.totalUsage) * 100).toFixed(0)
+                    : '0';
+                  return (
+                    <div key={entry.id} className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-sm shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span
+                        className="text-[11px] text-foreground/80 truncate flex-1"
+                        title={entry.name}
+                      >
+                        {entry.name}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        {pct}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Top Applications Bar Chart */}
+          {/* Application Bandwidth Distribution — horizontal bars eliminate label rotation / overlap */}
           <Card className="border-border/50">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-slate-200">
-                  <BarChart3 className="h-4 w-4 text-cyan-400" />
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <BarChart3 className="h-4 w-4 text-[color:var(--chart-2)]" />
                   Application Bandwidth Distribution
                 </CardTitle>
                 <SaveToWorkspace
@@ -726,48 +725,54 @@ export function AppInsights({ api }: AppInsightsProps) {
                 />
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pb-3">
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={chartData.topThroughput.slice(0, 8)}
-                    layout="horizontal"
-                    margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
+                    layout="vertical"
+                    margin={{ top: 2, right: 64, left: 4, bottom: 2 }}
+                    barCategoryGap="20%"
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#475569" opacity={0.4} vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} horizontal={false} />
                     <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 11, fill: '#94a3b8' }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                      axisLine={{ stroke: '#475569' }}
-                      tickLine={{ stroke: '#475569' }}
+                      type="number"
+                      tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                      tickFormatter={(v) => formatThroughputCompact(v)}
+                      axisLine={{ stroke: 'var(--border)' }}
+                      tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 11, fill: '#94a3b8' }}
-                      tickFormatter={(v) => formatThroughputCompact(v)}
-                      width={45}
-                      axisLine={{ stroke: '#475569' }}
-                      tickLine={{ stroke: '#475569' }}
+                      type="category"
+                      dataKey="name"
+                      tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                      width={110}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: string) => v.length > 15 ? v.substring(0, 15) + '…' : v}
                     />
                     <Tooltip
                       formatter={(value: number) => [formatThroughput(value), 'Throughput']}
                       labelFormatter={(label) => label}
                       contentStyle={{
-                        backgroundColor: '#1e293b',
-                        border: '1px solid #475569',
+                        backgroundColor: 'var(--popover)',
+                        border: '1px solid var(--border)',
                         borderRadius: '8px',
                         fontSize: '12px',
-                        color: '#f1f5f9',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                        color: 'var(--popover-foreground)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                       }}
-                      cursor={{ fill: '#334155', opacity: 0.3 }}
+                      cursor={{ fill: 'var(--muted)', opacity: 0.4 }}
                     />
                     <Bar
                       dataKey="value"
-                      radius={[6, 6, 0, 0]}
+                      radius={[0, 6, 6, 0]}
+                      label={{
+                        position: 'right',
+                        fontSize: 10,
+                        fill: 'var(--muted-foreground)',
+                        formatter: (v: number) => formatThroughputCompact(v)
+                      }}
                     >
                       {chartData.topThroughput.slice(0, 8).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={getCategoryColor(entry.name, index)} />

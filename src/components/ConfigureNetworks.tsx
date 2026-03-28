@@ -1140,9 +1140,9 @@ export function ConfigureNetworks() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center space-x-1 bg-secondary/10 border border-secondary/20 rounded-full px-3 py-1.5 min-w-[60px] justify-center">
-                          <Users className="h-4 w-4 text-secondary" />
-                          <span className="text-sm font-semibold text-secondary">
+                        <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 rounded-full px-3 py-1 min-w-[52px] justify-center">
+                          <Users className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-sm font-semibold text-foreground tabular-nums">
                             {network.currentClients || 0}
                           </span>
                         </div>
@@ -1151,8 +1151,8 @@ export function ConfigureNetworks() {
                         <div className="flex items-center space-x-1">
                           {(network.captivePortal || network.enableCaptivePortal) ? (
                             <>
-                              <Globe className="h-3 w-3 text-blue-500" />
-                              <span className="text-xs text-blue-500">Enabled</span>
+                              <Globe className="h-3 w-3 text-[color:var(--status-info)]" />
+                              <span className="text-xs text-[color:var(--status-info)]">Enabled</span>
                             </>
                           ) : (
                             <>
@@ -1318,9 +1318,9 @@ export function ConfigureNetworks() {
                   </div>
                   <Progress value={(bulkProgress.completed / bulkProgress.total) * 100} className="h-2" />
                   <div className="flex gap-4 text-sm">
-                    <span className="text-green-600">✓ {bulkProgress.succeeded} succeeded</span>
+                    <span className="text-[color:var(--status-success)]">✓ {bulkProgress.succeeded} succeeded</span>
                     {bulkProgress.failed > 0 && (
-                      <span className="text-red-600">✗ {bulkProgress.failed} failed</span>
+                      <span className="text-[color:var(--status-error)]">✗ {bulkProgress.failed} failed</span>
                     )}
                   </div>
                 </div>
@@ -1365,9 +1365,9 @@ export function ConfigureNetworks() {
                   </div>
                   <Progress value={(bulkProgress.completed / bulkProgress.total) * 100} className="h-2" />
                   <div className="flex gap-4 text-sm">
-                    <span className="text-green-600">✓ {bulkProgress.succeeded} succeeded</span>
+                    <span className="text-[color:var(--status-success)]">✓ {bulkProgress.succeeded} succeeded</span>
                     {bulkProgress.failed > 0 && (
-                      <span className="text-red-600">✗ {bulkProgress.failed} failed</span>
+                      <span className="text-[color:var(--status-error)]">✗ {bulkProgress.failed} failed</span>
                     )}
                   </div>
                 </div>

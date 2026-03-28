@@ -8,18 +8,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DetailSlideOut } from './DetailSlideOut';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { ScrollArea } from './ui/scroll-area';
-import { AlertCircle, Wifi, Search, RefreshCw, Filter, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Building, Info, Columns, Anchor, Phone, FileDown, Radio, Cable, Loader2 } from 'lucide-react';
+import { AlertCircle, Wifi, Search, RefreshCw, Eye, Users, Activity, Signal, Cpu, HardDrive, MoreVertical, Shield, Key, RotateCcw, MapPin, Settings, AlertTriangle, Download, Trash2, Cloud, Power, WifiOff, CheckCircle2, XCircle, Info, Anchor, Phone, FileDown, Cable } from 'lucide-react';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { Checkbox } from './ui/checkbox';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
 import { apiService, AccessPoint, APDetails, APStation, APQueryColumn, Site } from '../services/api';
 import { ExportButton } from './ExportButton';
 import { toast } from 'sonner';
 import { SaveToWorkspace } from './SaveToWorkspace';
+import { useTableCustomization } from '@/hooks/useTableCustomization';
+import { ColumnCustomizationDialog } from './ui/ColumnCustomizationDialog';
+import { AP_TABLE_COLUMNS } from '@/config/apTableColumns';
 
 // Cable health detection utilities
 interface CableHealthResult {
@@ -362,61 +363,46 @@ function analyzeCableHealth(
   };
 }
 
-// Define available columns with friendly labels
-interface ColumnConfig {
-  key: string;
-  label: string;
-  defaultVisible: boolean;
-  category: 'basic' | 'network' | 'status' | 'performance' | 'hardware' | 'advanced';
-}
 
-const AVAILABLE_COLUMNS: ColumnConfig[] = [
-  // Basic columns (always visible core columns)
-  { key: 'connection', label: 'Connection Status', defaultVisible: true, category: 'basic' },
-  { key: 'apName', label: 'AP Name', defaultVisible: true, category: 'basic' },
-  { key: 'serialNumber', label: 'Serial Number', defaultVisible: true, category: 'basic' },
-  { key: 'hostSite', label: 'Site/Location', defaultVisible: true, category: 'basic' },
-  { key: 'model', label: 'Model', defaultVisible: true, category: 'basic' },
-  { key: 'ipAddress', label: 'IP Address', defaultVisible: true, category: 'basic' },
-  { key: 'clients', label: 'Connected Clients', defaultVisible: true, category: 'basic' },
-
-  // Network columns
-  { key: 'meshRole', label: 'Mesh Role', defaultVisible: false, category: 'network' },
-  { key: 'cableHealth', label: 'Cable Health', defaultVisible: false, category: 'network' },
-  { key: 'macAddress', label: 'MAC Address', defaultVisible: false, category: 'network' },
-  { key: 'ethMode', label: 'Ethernet Mode', defaultVisible: false, category: 'network' },
-  { key: 'ethSpeed', label: 'Ethernet Speed', defaultVisible: false, category: 'network' },
-  { key: 'tunnel', label: 'Tunnel', defaultVisible: false, category: 'network' },
-  { key: 'wiredClients', label: 'Wired Clients', defaultVisible: false, category: 'network' },
-
-  // Status columns
-  { key: 'status', label: 'Status', defaultVisible: false, category: 'status' },
-  { key: 'uptime', label: 'Uptime', defaultVisible: false, category: 'status' },
-  { key: 'adoptedBy', label: 'Adopted By', defaultVisible: false, category: 'status' },
-  { key: 'home', label: 'Home Platform', defaultVisible: false, category: 'status' },
-
-  // Performance columns
-  { key: 'cpuUsage', label: 'CPU %', defaultVisible: false, category: 'performance' },
-  { key: 'memoryUsage', label: 'Memory %', defaultVisible: false, category: 'performance' },
-  { key: 'pwrUsage', label: 'Power Usage (W)', defaultVisible: false, category: 'performance' },
-  { key: 'pwrSource', label: 'Power Source', defaultVisible: false, category: 'performance' },
-  { key: 'channelUtilization', label: 'Avg Channel Util %', defaultVisible: false, category: 'performance' },
-
-  // Hardware columns
-  { key: 'softwareVersion', label: 'Firmware Version', defaultVisible: false, category: 'hardware' },
-  { key: 'platformName', label: 'Platform', defaultVisible: false, category: 'hardware' },
-  { key: 'environment', label: 'Environment', defaultVisible: false, category: 'hardware' },
-  { key: 'ethPowerStatus', label: 'Ethernet Power Status', defaultVisible: false, category: 'hardware' },
-
-  // Advanced columns
-  { key: 'profileName', label: 'Profile Name', defaultVisible: false, category: 'advanced' },
-  { key: 'rfMgmtPolicyName', label: 'RF Management Policy', defaultVisible: false, category: 'advanced' },
-  { key: 'switchPorts', label: 'Switch Ports', defaultVisible: false, category: 'advanced' },
-  { key: 'source', label: 'Location Source', defaultVisible: false, category: 'advanced' },
-  { key: 'floorName', label: 'Floor Name', defaultVisible: false, category: 'advanced' },
-  { key: 'description', label: 'Description', defaultVisible: false, category: 'advanced' },
-  { key: 'afcAnchor', label: 'AFC Anchor', defaultVisible: false, category: 'advanced' },
+// Wi-Fi generation model prefix mapping (order matters — longer/more-specific prefixes first)
+type WifiGen = 'Wi-Fi 7' | 'Wi-Fi 6E' | 'Wi-Fi 6' | 'Wi-Fi 5' | 'Unknown';
+const WIFI_GEN_PREFIXES: Array<{ prefix: string; gen: WifiGen }> = [
+  // Wi-Fi 7
+  { prefix: 'AP5020',  gen: 'Wi-Fi 7'  },
+  { prefix: 'AP4060',  gen: 'Wi-Fi 7'  },
+  // Wi-Fi 6E
+  { prefix: 'AP3000',  gen: 'Wi-Fi 6E' },
+  { prefix: 'AP4000',  gen: 'Wi-Fi 6E' },
+  { prefix: 'AP5010',  gen: 'Wi-Fi 6E' },
+  { prefix: 'AP5050',  gen: 'Wi-Fi 6E' },
+  // Wi-Fi 6
+  { prefix: 'AP302W',  gen: 'Wi-Fi 6'  },
+  { prefix: 'AP305C',  gen: 'Wi-Fi 6'  },  // must precede AP305 (Wi-Fi 5)
+  { prefix: 'AP360',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP410',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP460',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP505',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP510',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP560',   gen: 'Wi-Fi 6'  },
+  { prefix: 'AP650',   gen: 'Wi-Fi 6'  },
+  // Wi-Fi 5
+  { prefix: 'AP305',   gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3705',  gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3825',  gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3865',  gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3912',  gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3935',  gen: 'Wi-Fi 5'  },
+  { prefix: 'AP3965',  gen: 'Wi-Fi 5'  },
 ];
+
+function getWifiGeneration(model?: string): WifiGen {
+  if (!model) return 'Unknown';
+  const m = model.toUpperCase().trim();
+  for (const { prefix, gen } of WIFI_GEN_PREFIXES) {
+    if (m.startsWith(prefix.toUpperCase())) return gen;
+  }
+  return 'Unknown';
+}
 
 interface AccessPointsProps {
   onShowDetail?: (serialNumber: string, displayName?: string) => void;
@@ -436,8 +422,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
   const [isLoadingMeshRoles, setIsLoadingMeshRoles] = useState(false);
   const [error, setError] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [hardwareFilter, setHardwareFilter] = useState<string>('all');
   const [selectedAP, setSelectedAP] = useState<APDetails | null>(null);
   const [apStations, setApStations] = useState<APStation[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
@@ -458,21 +442,27 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
     lastSync: null as Date | null
   });
   const [, setTimeUpdateCounter] = useState(0);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    // Load from localStorage or use defaults
-    const saved = localStorage.getItem('apVisibleColumns');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to parse saved columns:', e);
-      }
-    }
-    return AVAILABLE_COLUMNS.filter(col => col.defaultVisible).map(col => col.key);
-  });
-  const [isColumnDialogOpen, setIsColumnDialogOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Universal column customization (matches ConnectedClients pattern)
+  const customization = useTableCustomization({
+    tableId: 'access-points',
+    columns: AP_TABLE_COLUMNS,
+    storageKey: 'apVisibleColumns',
+    enableViews: true,
+    enablePersistence: true,
+  });
+
+  // Derive visible column keys from the customization hook
+  const visibleColumns = customization.visibleColumns;
+
+  // Wi-Fi generation breakdown counts
+  const wifiGenCounts = useMemo(() => {
+    const counts: Record<WifiGen, number> = { 'Wi-Fi 7': 0, 'Wi-Fi 6E': 0, 'Wi-Fi 6': 0, 'Wi-Fi 5': 0, 'Unknown': 0 };
+    accessPoints.forEach(ap => { counts[getWifiGeneration(ap.model || ap.hardwareType || ap.apModel || ap.platformName)]++; });
+    return counts;
+  }, [accessPoints]);
 
   // Compute cable health for all APs (memoized for performance)
   const cableHealthMap = useMemo(() => {
@@ -536,26 +526,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
     return () => clearInterval(intervalId);
   }, []);
-
-  // Save visible columns to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('apVisibleColumns', JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
-
-  const toggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev => {
-      if (prev.includes(columnKey)) {
-        return prev.filter(k => k !== columnKey);
-      } else {
-        return [...prev, columnKey];
-      }
-    });
-  };
-
-  const resetColumns = () => {
-    const defaults = AVAILABLE_COLUMNS.filter(col => col.defaultVisible).map(col => col.key);
-    setVisibleColumns(defaults);
-  };
 
   const loadData = async () => {
     setError('');
@@ -897,10 +867,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       ap.ipAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       getAPSite(ap)?.toLowerCase().includes(searchTerm.toLowerCase()); // Include site in search
 
-    const matchesStatus = statusFilter === 'all' || ap.status?.toLowerCase() === statusFilter.toLowerCase();
-    const matchesHardware = hardwareFilter === 'all' || ap.hardwareType === hardwareFilter;
-
-    return matchesSearch && matchesStatus && matchesHardware;
+    return matchesSearch;
   });
 
   // Check if AP is an AFC anchor (6 GHz Standard Power)
@@ -1031,11 +998,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
     return sortDirection === 'asc' ? comparison : -comparison;
   });
-
-  const getUniqueStatuses = () => {
-    const statuses = new Set(accessPoints.map(ap => ap.status).filter(Boolean));
-    return Array.from(statuses);
-  };
 
   const getUniqueHardwareTypes = () => {
     const types = new Set(accessPoints.map(ap => ap.hardwareType).filter(Boolean));
@@ -1303,7 +1265,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <CheckCircle2 className="h-4 w-4 text-green-500 cursor-help" />
+            <CheckCircle2 className="h-4 w-4 text-[color:var(--status-success)] cursor-help" />
           </TooltipTrigger>
           <TooltipContent>
             <p className="font-medium">Online</p>
@@ -1315,7 +1277,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>
-            <XCircle className="h-4 w-4 text-red-500 cursor-help" />
+            <XCircle className="h-4 w-4 text-[color:var(--status-error)] cursor-help" />
           </TooltipTrigger>
           <TooltipContent>
             <p className="font-medium">Offline</p>
@@ -1431,7 +1393,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             {isAfcAnchor(ap) && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Anchor className="h-4 w-4 text-blue-500 cursor-help" />
+                  <Anchor className="h-4 w-4 text-[color:var(--status-info)] cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="font-medium">AFC Anchor</p>
@@ -1443,36 +1405,36 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             {apCableHealth && (apCableHealth.status === 'warning' || apCableHealth.status === 'critical') && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Cable className={`h-4 w-4 cursor-help ${apCableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`} />
+                  <Cable className={`h-4 w-4 cursor-help ${apCableHealth.status === 'critical' ? 'text-[color:var(--status-error)]' : 'text-[color:var(--status-warning)]'}`} />
                 </TooltipTrigger>
                 <TooltipContent side="bottom" sideOffset={5}>
                   <div className="max-w-xs">
                     {/* Header */}
-                    <p className={`font-semibold ${apCableHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                    <p className={`font-semibold ${apCableHealth.status === 'critical' ? 'text-[color:var(--status-error)]' : 'text-[color:var(--status-warning)]'}`}>
                       {apCableHealth.status === 'critical' ? 'Bad Cable Detected' : 'Possible Cable Issue'}
                     </p>
 
                     {/* Speed info */}
                     <p className="mt-1">
-                      <span className={apCableHealth.status === 'critical' ? 'text-red-400' : 'text-amber-400'}>
+                      <span className={apCableHealth.status === 'critical' ? 'text-[color:var(--status-error)]' : 'text-[color:var(--status-warning)]'}>
                         {apCableHealth.speedDisplay}
                       </span>
                       {' '}(expected{' '}
-                      <span className="text-green-400">
+                      <span className="text-[color:var(--status-success)]">
                         {apCableHealth.expectedSpeedMbps >= 1000 ? `${apCableHealth.expectedSpeedMbps/1000}Gbps` : `${apCableHealth.expectedSpeedMbps}Mbps`}
                       </span>)
                     </p>
 
                     {/* Recommendation */}
                     {apCableHealth.issues && apCableHealth.issues.length > 0 && (
-                      <p className="text-xs mt-2 text-blue-400">
+                      <p className="text-xs mt-2 text-[color:var(--status-info)]">
                         <span className="font-medium">Fix:</span> {apCableHealth.issues[0].recommendation}
                       </p>
                     )}
 
                     {/* Switch comparison */}
                     {apCableHealth.otherAPsOnSwitch && apCableHealth.otherAPsOnSwitch.good > 0 && (
-                      <p className="mt-1 text-emerald-400">
+                      <p className="mt-1 text-[color:var(--status-success)]">
                         {apCableHealth.otherAPsOnSwitch.good} other APs on switch OK - issue is this cable
                       </p>
                     )}
@@ -1497,10 +1459,10 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         return <span className="font-mono text-sm">{ap.ipAddress || '-'}</span>;
       case 'clients':
         return (
-          <div className="flex items-center space-x-1 bg-secondary/10 border border-secondary/20 rounded-full px-3 py-1.5 min-w-[60px] justify-center">
-            <Users className="h-4 w-4 text-secondary" />
-            <span className="text-sm font-semibold text-secondary">{getClientCount(ap)}</span>
-            {isLoadingClients && <Activity className="h-3 w-3 text-secondary/60 animate-pulse ml-1" />}
+          <div className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 rounded-full px-3 py-1 min-w-[52px] justify-center">
+            <Users className="h-3.5 w-3.5 text-primary" />
+            <span className="text-sm font-semibold text-foreground tabular-nums">{getClientCount(ap)}</span>
+            {isLoadingClients && <Activity className="h-3 w-3 text-muted-foreground animate-pulse" />}
           </div>
         );
       case 'macAddress':
@@ -1514,7 +1476,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className={`text-sm flex items-center gap-1 ${ethHealth.status === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                <span className={`text-sm flex items-center gap-1 ${ethHealth.status === 'critical' ? 'text-[color:var(--status-error)]' : 'text-[color:var(--status-warning)]'}`}>
                   <AlertTriangle className="h-3 w-3" />
                   {ethSpeedValue}
                 </span>
@@ -1533,7 +1495,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         }
         if (role === 'BASE') {
           return (
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-xs">
+            <Badge variant="outline" className="bg-[color:var(--status-info-bg)] text-[color:var(--status-info)] border-[color:var(--status-info)]/30 text-xs">
               Base
             </Badge>
           );
@@ -1554,7 +1516,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         }
         if (cableHealth.status === 'good') {
           return (
-            <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/30">
+            <Badge variant="outline" className="bg-[color:var(--status-success-bg)] text-[color:var(--status-success)] border-[color:var(--status-success)]/30">
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Good
             </Badge>
@@ -1564,7 +1526,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/30 cursor-help">
+                <Badge variant="outline" className="bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] border-[color:var(--status-warning)]/30 cursor-help">
                   <AlertTriangle className="h-3 w-3 mr-1" />
                   Warning
                 </Badge>
@@ -1573,7 +1535,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 <p className="font-medium mb-1">Possible Cable Issue</p>
                 <p>{cableHealth.message}</p>
                 {cableHealth.otherAPsOnSwitch && cableHealth.otherAPsOnSwitch.good > 0 && (
-                  <p className="mt-1 text-amber-400">
+                  <p className="mt-1 text-[color:var(--status-warning)]">
                     Other APs on same switch have good rates - issue likely isolated to this cable
                   </p>
                 )}
@@ -1594,7 +1556,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <p className="font-medium mb-1">Likely Cable Problem</p>
               <p>{cableHealth.message}</p>
               {cableHealth.otherAPsOnSwitch && cableHealth.otherAPsOnSwitch.good > 0 && (
-                <p className="mt-1 text-red-300">
+                <p className="mt-1 text-[color:var(--status-error)]">
                   {cableHealth.otherAPsOnSwitch.good} other APs on same switch have good rates - issue is with this cable/connector
                 </p>
               )}
@@ -1664,11 +1626,11 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <div className="flex items-center gap-2 cursor-help">
                 <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all ${cpuValue > 80 ? 'bg-red-500' : cpuValue > 60 ? 'bg-amber-500' : 'bg-green-500'}`}
+                    className={`h-full transition-all ${cpuValue > 80 ? 'bg-[color:var(--status-error)]' : cpuValue > 60 ? 'bg-[color:var(--status-warning)]' : 'bg-[color:var(--status-success)]'}`}
                     style={{ width: `${Math.min(cpuValue, 100)}%` }}
                   />
                 </div>
-                <span className={`text-sm font-medium ${cpuValue > 80 ? 'text-red-500' : cpuValue > 60 ? 'text-amber-500' : ''}`}>
+                <span className={`text-sm font-medium ${cpuValue > 80 ? 'text-[color:var(--status-error)]' : cpuValue > 60 ? 'text-[color:var(--status-warning)]' : ''}`}>
                   {cpuValue}%
                 </span>
               </div>
@@ -1704,11 +1666,11 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <div className="flex items-center gap-2 cursor-help">
                 <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                   <div
-                    className={`h-full transition-all ${memValue > 85 ? 'bg-red-500' : memValue > 70 ? 'bg-amber-500' : 'bg-blue-500'}`}
+                    className={`h-full transition-all ${memValue > 85 ? 'bg-[color:var(--status-error)]' : memValue > 70 ? 'bg-[color:var(--status-warning)]' : 'bg-[color:var(--status-info)]'}`}
                     style={{ width: `${Math.min(memValue, 100)}%` }}
                   />
                 </div>
-                <span className={`text-sm font-medium ${memValue > 85 ? 'text-red-500' : memValue > 70 ? 'text-amber-500' : ''}`}>
+                <span className={`text-sm font-medium ${memValue > 85 ? 'text-[color:var(--status-error)]' : memValue > 70 ? 'text-[color:var(--status-warning)]' : ''}`}>
                   {memValue}%
                 </span>
               </div>
@@ -1724,8 +1686,8 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1 cursor-help">
-                <Anchor className="h-4 w-4 text-blue-500" />
-                <span className="text-sm text-blue-500 font-medium">Yes</span>
+                <Anchor className="h-4 w-4 text-[color:var(--status-info)]" />
+                <span className="text-sm text-[color:var(--status-info)] font-medium">Yes</span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
@@ -1841,14 +1803,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             <Cpu className="mr-2 h-4 w-4" />
             {isLoadingMetrics ? 'Loading...' : 'Refresh Metrics'}
           </Button>
-          <Button
-            onClick={() => setIsColumnDialogOpen(true)}
-            variant="outline"
-            size="sm"
-          >
-            <Columns className="mr-2 h-4 w-4" />
-            Customize Columns
-          </Button>
+          <ColumnCustomizationDialog customization={customization} />
           <ExportButton
             data={sortedAccessPoints}
             columns={[
@@ -1882,7 +1837,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         if (criticalAPs.length === 0 && warningAPs.length === 0) return null;
 
         return (
-          <Alert variant={criticalAPs.length > 0 ? 'destructive' : 'default'} className={criticalAPs.length > 0 ? 'border-red-500 bg-red-500/10' : 'border-amber-500 bg-amber-500/10'}>
+          <Alert variant={criticalAPs.length > 0 ? 'destructive' : 'default'} className={criticalAPs.length > 0 ? 'border-[color:var(--status-error)]/30 bg-[color:var(--status-error-bg)]' : 'border-[color:var(--status-warning)]/30 bg-[color:var(--status-warning-bg)]'}>
             <Cable className="h-4 w-4" />
             <AlertDescription className="flex items-center justify-between w-full">
               <div>
@@ -1896,7 +1851,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                     </Badge>
                   )}
                   {warningAPs.length > 0 && (
-                    <Badge variant="outline" className="bg-amber-500/20 text-amber-500 border-amber-500/50">
+                    <Badge variant="outline" className="bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] border-[color:var(--status-warning)]/30">
                       {warningAPs.length} Warning
                     </Badge>
                   )}
@@ -1929,163 +1884,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         );
       })()}
 
-      {/* Column Customization Dialog */}
-      <DetailSlideOut
-        isOpen={isColumnDialogOpen}
-        onClose={() => setIsColumnDialogOpen(false)}
-        title="Customize Table Columns"
-        description="Select which columns you want to display in the Access Points table"
-        width="lg"
-      >
-        <div className="space-y-6">
-            <div className="space-y-6">
-              {/* Basic Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Basic Information</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'basic').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Network Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Network</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'network').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Status Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Status</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'status').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Performance Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Performance</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'performance').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Hardware Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Hardware</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'hardware').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Advanced Columns */}
-              <div>
-                <h3 className="font-semibold mb-3 text-sm uppercase text-muted-foreground">Advanced</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {AVAILABLE_COLUMNS.filter(col => col.category === 'advanced').map(column => (
-                    <div key={column.key} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={column.key}
-                        checked={visibleColumns.includes(column.key)}
-                        onCheckedChange={() => toggleColumn(column.key)}
-                      />
-                      <label
-                        htmlFor={column.key}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                      >
-                        {column.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-          {/* Footer Actions */}
-          <div className="flex justify-between items-center pt-6 border-t mt-6">
-            <Button variant="outline" onClick={resetColumns}>
-              Reset to Default
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              {visibleColumns.length} of {AVAILABLE_COLUMNS.length} columns selected
-            </div>
-            <Button onClick={() => setIsColumnDialogOpen(false)}>
-              Done
-            </Button>
-          </div>
-        </div>
-      </DetailSlideOut>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
@@ -2099,9 +1897,15 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </CardHeader>
           <CardContent className="relative">
             <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{accessPoints.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Managed devices
-            </p>
+            <p className="text-xs text-muted-foreground mb-2">Managed devices</p>
+            <div className="space-y-0.5">
+              {(['Wi-Fi 7', 'Wi-Fi 6E', 'Wi-Fi 6', 'Wi-Fi 5'] as const).map(gen => wifiGenCounts[gen] > 0 && (
+                <div key={gen} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{gen}</span>
+                  <span className="font-medium tabular-nums">{wifiGenCounts[gen]}</span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -2118,7 +1922,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <CheckCircle2 className="h-4 w-4 text-[color:var(--status-success)]" />
                   <span className="text-sm font-medium">Online</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2134,11 +1938,11 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <WifiOff className="h-4 w-4 text-red-500" />
+                  <WifiOff className="h-4 w-4 text-[color:var(--status-error)]" />
                   <span className="text-sm font-medium">Offline</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-red-500">
+                  <span className="text-xl font-bold text-[color:var(--status-error)]">
                     {accessPoints.filter(ap => !isAPOnline(ap)).length}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -2199,10 +2003,10 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         <CardContent className="py-2 px-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-red-500" />
+              <Phone className="h-4 w-4 text-[color:var(--status-error)]" />
               <span className="font-medium text-sm">E911 BSSID</span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40">Beta</span>
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 dark:bg-slate-800 text-emerald-400 text-xs font-semibold border border-emerald-500/30">
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] border border-[color:var(--status-warning)]/30">Beta</span>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-[color:var(--status-success)] text-xs font-semibold border border-[color:var(--status-success)]/30">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -2222,7 +2026,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                     className="relative p-1 hover:opacity-80 transition-opacity cursor-pointer"
                   >
                     <span className="absolute inset-0 bg-red-500/30 rounded-full animate-ping" />
-                    <Settings className="h-4 w-4 text-red-500 relative animate-[spin_4s_linear_infinite]" />
+                    <Settings className="h-4 w-4 text-[color:var(--status-error)] relative animate-[spin_4s_linear_infinite]" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -2233,7 +2037,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 onClick={handleDownloadBSSIDs}
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-red-500/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
+                className="h-7 text-xs border-[color:var(--status-error)]/50 text-[color:var(--status-error)] hover:bg-[color:var(--status-error-bg)]"
                 disabled={filteredAccessPoints.length === 0}
               >
                 <FileDown className="mr-1 h-3 w-3" />
@@ -2243,7 +2047,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 onClick={handleDownloadBSSIDsJSON}
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-red-500/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
+                className="h-7 text-xs border-[color:var(--status-error)]/50 text-[color:var(--status-error)] hover:bg-[color:var(--status-error-bg)]"
                 disabled={filteredAccessPoints.length === 0}
               >
                 <Download className="mr-1 h-3 w-3" />
@@ -2274,26 +2078,19 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
             }
           </CardDescription>
           
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by serial number, name, model, IP, or site..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by serial number, name, model, IP, or site..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-10"
+              />
             </div>
-            
-            <Select value={selectedSite} onValueChange={(value) => {
-              console.log('Site selection changed to:', value);
-              setSelectedSite(value);
-            }}>
-              <SelectTrigger className="w-48">
-                <Building className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Select Site" />
+            <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <SelectTrigger className="w-44 h-10 shrink-0">
+                <SelectValue placeholder="All Sites" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sites</SelectItem>
@@ -2314,31 +2111,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 )}
               </SelectContent>
             </Select>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-32">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {getUniqueStatuses().map((status) => (
-                  <SelectItem key={status} value={status}>{status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Select value={hardwareFilter} onValueChange={setHardwareFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Hardware" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Hardware</SelectItem>
-                {getUniqueHardwareTypes().map((type) => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -2347,7 +2119,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <Wifi className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No Access Points Found</h3>
               <p className="text-muted-foreground">
-                {searchTerm || statusFilter !== 'all' || hardwareFilter !== 'all'
+                {searchTerm || selectedSite !== 'all'
                   ? 'No access points match your current filters.'
                   : 'No access points are currently configured.'}
               </p>
@@ -2358,7 +2130,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                 <TableHeader>
                   <TableRow>
                     {visibleColumns.map(columnKey => {
-                      const column = AVAILABLE_COLUMNS.find(c => c.key === columnKey);
+                      const column = AP_TABLE_COLUMNS.find(c => c.key === columnKey);
                       return (
                         <TableHead
                           key={columnKey}
@@ -2749,7 +2521,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                           }
                           
                           return (
-                            <div key={key} className="flex justify-between py-1 border-b border-gray-100 last:border-b-0">
+                            <div key={key} className="flex justify-between py-1 border-b border-border last:border-b-0">
                               <span className="text-muted-foreground capitalize">
                                 {key.replace(/([A-Z])/g, ' $1').trim()}:
                               </span>
@@ -2778,7 +2550,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       >
         <div className="space-y-5">
           {/* Live Sync Status - At top for visibility */}
-          <div className="flex items-center justify-between p-3 rounded-lg border border-green-500/40 bg-green-500/10">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-[color:var(--status-success)]/40 bg-[color:var(--status-success-bg)]">
             <div className="flex items-center gap-3">
               <div className="relative flex items-center justify-center">
                 <span className="absolute h-3 w-3 bg-green-500 rounded-full animate-ping opacity-75" />

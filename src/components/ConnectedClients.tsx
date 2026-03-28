@@ -10,11 +10,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Checkbox } from './ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { AlertCircle, Users, Search, RefreshCw, Filter, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, Columns, Route, ArrowLeft, FileDown, UserMinus2 } from 'lucide-react';
+import { AlertCircle, Users, RefreshCw, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, Columns, Route, ArrowLeft, FileDown, UserMinus2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
-import { apiService, Station, type StationEvent, type APEvent, type RRMEvent } from '../services/api';
+import { apiService, Station, Site, type StationEvent, type APEvent, type RRMEvent } from '../services/api';
 import { RoamingTrail } from './RoamingTrail';
 import { identifyClient, lookupVendor, suggestDeviceType } from '../services/ouiLookup';
 import { toast } from 'sonner';
@@ -31,11 +31,9 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
   const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [apFilter, setApFilter] = useState<string>('all');
   const [siteFilter, setSiteFilter] = useState<string>('all');
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all');
+  const [sites, setSites] = useState<Site[]>([]);
+  const [isLoadingSites, setIsLoadingSites] = useState(false);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStations, setSelectedStations] = useState<Set<string>>(new Set());
@@ -68,6 +66,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
 
   useEffect(() => {
     loadStations();
+    loadSites();
   }, []);
 
   const loadStations = async () => {
@@ -90,6 +89,19 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
       console.error('Error loading stations:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadSites = async () => {
+    setIsLoadingSites(true);
+    try {
+      if (!apiService.isAuthenticated()) { setSites([]); return; }
+      const sitesData = await apiService.getSites();
+      setSites(Array.isArray(sitesData) ? sitesData : []);
+    } catch {
+      setSites([]);
+    } finally {
+      setIsLoadingSites(false);
     }
   };
 
@@ -154,23 +166,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
   };
 
   const filteredStations = stations.filter((station) => {
-    const matchesSearch = !searchTerm ||
-      station.macAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.ipAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.hostName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.apName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.apSerial?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.siteName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.network?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      station.manufacturer?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || station.status?.toLowerCase() === statusFilter.toLowerCase();
-    const matchesAP = apFilter === 'all' || station.apSerial === apFilter || station.apName === apFilter;
-    const matchesSite = siteFilter === 'all' || station.siteName === siteFilter;
-    const matchesDeviceType = deviceTypeFilter === 'all' || station.deviceType === deviceTypeFilter;
-
-    return matchesSearch && matchesStatus && matchesAP && matchesSite && matchesDeviceType;
+    return siteFilter === 'all' || station.siteName === siteFilter;
   });
 
   // Helper function to get sortable value for a column
@@ -262,24 +258,9 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
     return sortDirection === 'asc' ? comparison : -comparison;
   });
 
-  const getUniqueStatuses = () => {
-    const statuses = new Set(stations.map(station => station.status).filter(Boolean));
-    return Array.from(statuses);
-  };
-
-  const getUniqueAPs = () => {
-    const aps = new Set(stations.map(station => station.apName || station.apSerial).filter(Boolean));
-    return Array.from(aps);
-  };
-
   const getUniqueSites = () => {
     const sites = new Set(stations.map(station => station.siteName).filter(Boolean));
     return Array.from(sites);
-  };
-
-  const getUniqueDeviceTypes = () => {
-    const deviceTypes = new Set(stations.map(station => station.deviceType).filter(Boolean));
-    return Array.from(deviceTypes);
   };
 
   const getUniqueNetworks = () => {
@@ -602,18 +583,25 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Connected Clients</h1>
-          <p className="text-muted-foreground">
-            Monitor and manage connected wireless client devices across your network
-          </p>
+    <div className="space-y-4 p-4">
+      {/* Page header — consistent with Access Points style */}
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20 overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex items-center gap-2.5 relative z-10">
+          <div className="p-2 rounded-lg bg-primary shadow-sm shrink-0">
+            <Users className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">Connected Clients</h1>
+            <p className="text-xs text-muted-foreground">
+              Monitor and manage wireless clients across your network
+            </p>
+          </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={loadStations} variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
+        <div className="flex items-center gap-1.5 relative z-10 flex-wrap">
+          <Button onClick={loadStations} variant="outline" size="sm" className="h-8 px-3 text-xs">
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Refresh
           </Button>
           <ColumnCustomizationDialog
@@ -631,66 +619,78 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="surface-1dp">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stations.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Connected devices
-            </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-500 opacity-[0.07]" />
+          <CardContent className="p-3 relative">
+            <div className="flex items-start justify-between">
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Clients</p>
+                <p className="text-xl font-bold text-foreground">{stations.length}</p>
+                <p className="text-[10px] text-muted-foreground">Connected devices</p>
+              </div>
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md">
+                <Users className="h-3.5 w-3.5 text-white" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="surface-1dp">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Connections</CardTitle>
-            <Wifi className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{getActiveClientsCount()}</div>
-            <p className="text-xs text-muted-foreground">
-              Currently active
-            </p>
+        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-500 opacity-[0.07]" />
+          <CardContent className="p-3 relative">
+            <div className="flex items-start justify-between">
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Active</p>
+                <p className="text-xl font-bold" style={{ color: 'var(--status-success)' }}>{getActiveClientsCount()}</p>
+                <p className="text-[10px] text-muted-foreground">Currently active</p>
+              </div>
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md">
+                <Wifi className="h-3.5 w-3.5 text-white" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="surface-1dp">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sites</CardTitle>
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{getUniqueSiteCount()}</div>
-            <p className="text-xs text-muted-foreground">
-              Active sites
-            </p>
+        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-[0.07]" />
+          <CardContent className="p-3 relative">
+            <div className="flex items-start justify-between">
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Sites</p>
+                <p className="text-xl font-bold text-foreground">{getUniqueSiteCount()}</p>
+                <p className="text-[10px] text-muted-foreground">Active sites</p>
+              </div>
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
+                <MapPin className="h-3.5 w-3.5 text-white" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="surface-1dp">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Traffic</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatBytes(getTotalTraffic())}</div>
-            <p className="text-xs text-muted-foreground">
-              Data transferred
-            </p>
+        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-500 opacity-[0.07]" />
+          <CardContent className="p-3 relative">
+            <div className="flex items-start justify-between">
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Traffic</p>
+                <p className="text-xl font-bold text-foreground">{formatBytes(getTotalTraffic())}</p>
+                <p className="text-[10px] text-muted-foreground">Data transferred</p>
+              </div>
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md">
+                <Activity className="h-3.5 w-3.5 text-white" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* GDPR Data Rights Panel - Prominent */}
-      <Card className="border-2 border-blue-500 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
+      <Card className="border border-info/30 bg-[color:var(--status-info-bg)]">
         <CardContent className="py-4">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-500 rounded-lg">
+              <div className="p-2 bg-[color:var(--status-info)] rounded-lg">
                 <Shield className="h-6 w-6 text-white" />
               </div>
               <div>
@@ -705,20 +705,19 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
             <div className="flex flex-wrap gap-3">
               <Button
                 variant="outline"
-                className="bg-white dark:bg-background border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950"
                 onClick={handleDownloadSelectedClients}
                 disabled={selectedStations.size === 0}
               >
-                <FileDown className="mr-2 h-4 w-4 text-blue-600" />
+                <FileDown className="mr-2 h-4 w-4 text-[color:var(--status-info)]" />
                 Download Data ({selectedStations.size})
               </Button>
               <Button
                 variant="outline"
-                className="bg-white dark:bg-background border-red-300 hover:bg-red-50 dark:hover:bg-red-950"
+                className="border-destructive/30 hover:bg-destructive/5"
                 onClick={handleDeleteSelectedClients}
                 disabled={selectedStations.size === 0}
               >
-                <Trash2 className="mr-2 h-4 w-4 text-red-500" />
+                <Trash2 className="mr-2 h-4 w-4 text-destructive" />
                 Delete Data ({selectedStations.size})
               </Button>
             </div>
@@ -805,88 +804,45 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
             Select clients using the checkboxes to manage their GDPR data rights
           </CardDescription>
           
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-[2] min-w-0">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search clients by name, MAC, or site..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-10"
-                />
-              </div>
-            </div>
-            
+          <div className="flex items-center gap-3">
             <Select value={siteFilter} onValueChange={setSiteFilter}>
-              <SelectTrigger className="w-36 h-10">
-                <MapPin className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Site" />
+              <SelectTrigger className="w-44 h-10 shrink-0">
+                <SelectValue placeholder="All Sites" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sites</SelectItem>
-                {getUniqueSites().map((site) => (
-                  <SelectItem key={site} value={site}>{site}</SelectItem>
+                {sites.map((site) => (
+                  <SelectItem key={site.id} value={site.name || site.siteName || site.id}>
+                    {site.name || site.siteName}
+                  </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-28 h-10">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                {getUniqueStatuses().map((status) => (
-                  <SelectItem key={status} value={status}>{status}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={deviceTypeFilter} onValueChange={setDeviceTypeFilter}>
-              <SelectTrigger className="w-32 h-10">
-                <SelectValue placeholder="Device Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                {getUniqueDeviceTypes().map((type) => (
-                  <SelectItem key={type} value={type}>{type}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Select value={apFilter} onValueChange={setApFilter}>
-              <SelectTrigger className="w-36 h-10">
-                <Wifi className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Access Point" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {getUniqueAPs().map((ap) => (
-                  <SelectItem key={ap} value={ap}>{ap}</SelectItem>
-                ))}
+                {sites.length === 0 && !isLoadingSites && (
+                  <SelectItem value="no-sites" disabled>No sites available</SelectItem>
+                )}
+                {isLoadingSites && (
+                  <SelectItem value="loading" disabled>Loading sites...</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
         </CardHeader>
         <CardContent>
           {sortedStations.length === 0 ? (
-            <div className="text-center py-8">
-              <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No Connected Clients Found</h3>
-              <p className="text-muted-foreground">
-                {searchTerm || statusFilter !== 'all' || apFilter !== 'all' || siteFilter !== 'all' || deviceTypeFilter !== 'all'
+            <div className="text-center py-10">
+              <Users className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+              <h3 className="text-base font-medium mb-1">No Connected Clients Found</h3>
+              <p className="text-sm text-muted-foreground">
+                {siteFilter !== 'all'
                   ? 'No clients match your current filters.'
                   : 'No clients are currently connected to the network.'}
               </p>
             </div>
           ) : (
-            <div className="rounded-md border">
-              <Table className="text-[11px]">
+            <div className="rounded-md border overflow-x-auto">
+              <Table className="text-[11px] min-w-[640px]">
                 <TableHeader>
-                  <TableRow className="h-8">
-                    <TableHead className="w-10 p-1 text-[10px]">
+                  <TableRow className="h-9">
+                    <TableHead className="w-10 px-2 py-1 text-[10px]">
                       <Checkbox
                         checked={selectedStations.size === sortedStations.length && sortedStations.length > 0}
                         onCheckedChange={handleSelectAll}
@@ -896,19 +852,28 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                     {customization.visibleColumnConfigs.map(column => (
                       <TableHead
                         key={column.key}
-                        className="p-1 text-[10px] cursor-pointer select-none hover:bg-muted/50 transition-colors"
-                        onClick={() => handleSort(column.key)}
+                        className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide cursor-pointer select-none hover:bg-muted/50 transition-colors whitespace-nowrap"
+                        onClick={() => column.sortable !== false && handleSort(column.key)}
                       >
-                        {column.label}
+                        <span className="flex items-center gap-1">
+                          {column.label}
+                          {column.sortable !== false && (
+                            sortColumn === column.key
+                              ? sortDirection === 'asc'
+                                ? <ChevronUp className="h-3 w-3 text-primary shrink-0" />
+                                : <ChevronDown className="h-3 w-3 text-primary shrink-0" />
+                              : <ChevronsUpDown className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                          )}
+                        </span>
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedStations.map((station, index) => (
-                    <TableRow 
+                    <TableRow
                       key={station.macAddress || index}
-                      className="cursor-pointer hover:bg-muted/50 h-10"
+                      className="cursor-pointer hover:bg-muted/50 h-11"
                       onClick={(e) => {
                         // Don't trigger row click if clicking on checkbox
                         if ((e.target as HTMLElement).closest('[data-checkbox]')) {
@@ -922,7 +887,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                         }
                       }}
                     >
-                      <TableCell className="p-1" data-checkbox>
+                      <TableCell className="px-2 py-1" data-checkbox>
                         <Checkbox
                           checked={selectedStations.has(station.macAddress)}
                           onCheckedChange={(checked) => handleStationSelect(station.macAddress, checked as boolean)}
@@ -932,8 +897,14 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
                       </TableCell>
 
                       {customization.visibleColumnConfigs.map(column => (
-                        <TableCell key={column.key}>
-                          {column.renderCell ? column.renderCell(station) : (station as any)[column.key]}
+                        <TableCell key={column.key} className="px-2 py-1 max-w-[260px]">
+                          <div className="truncate" title={
+                            typeof (column.renderCell ? column.renderCell(station) : (station as any)[column.key]) === 'string'
+                              ? String((station as any)[column.fieldPath || column.key] || '')
+                              : undefined
+                          }>
+                            {column.renderCell ? column.renderCell(station) : (station as any)[column.key]}
+                          </div>
                         </TableCell>
                       ))}
                     </TableRow>

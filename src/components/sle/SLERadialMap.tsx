@@ -172,13 +172,12 @@ export function SLERadialMap({ sles, stations, aps, onClientClick }: SLERadialMa
               {/* Bubble — icon only */}
               <button
                 onClick={() => setSelectedId(isSelected ? null : sle.id)}
-                className="absolute flex items-center justify-center rounded-full transition-all duration-300 z-10 hover:brightness-110"
+                className={`absolute flex items-center justify-center rounded-full transition-all duration-300 z-10 hover:brightness-110 sle-node-bubble sle-node-${sle.status}`}
                 style={{
                   width: nodeSize,
                   height: nodeSize,
                   left: pos.x - nodeSize / 2,
                   top: pos.y - nodeSize / 2,
-                  background: STATUS_NODE_BG[sle.status],
                   border: `2px solid ${SLE_STATUS_COLORS[sle.status].hex}${isSelected ? '' : 'aa'}`,
                   boxShadow: isSelected
                     ? `0 0 20px ${SLE_STATUS_COLORS[sle.status].hex}70, 0 0 40px ${SLE_STATUS_COLORS[sle.status].hex}35`
@@ -217,10 +216,10 @@ export function SLERadialMap({ sles, stations, aps, onClientClick }: SLERadialMa
                   lineHeight: 1.2,
                 }}
               >
-                <div className="text-sm font-bold text-white whitespace-nowrap">
+                <div className="text-sm font-bold text-foreground whitespace-nowrap">
                   {sle.successRate.toFixed(1)}%
                 </div>
-                <div className="text-[9px] text-white/65 uppercase tracking-widest whitespace-nowrap mt-0.5">
+                <div className="text-[9px] text-muted-foreground uppercase tracking-widest whitespace-nowrap mt-0.5">
                   {sle.name}
                 </div>
               </div>
