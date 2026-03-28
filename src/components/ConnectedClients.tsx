@@ -4,7 +4,6 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DetailSlideOut } from './DetailSlideOut';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
@@ -14,8 +13,11 @@ import { AlertCircle, Users, RefreshCw, Wifi, Activity, Timer, Signal, Download,
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
-import { apiService, Station, Site, type StationEvent, type APEvent, type RRMEvent } from '../services/api';
+import { apiService, Station, type StationEvent, type APEvent, type RRMEvent } from '../services/api';
 import { RoamingTrail } from './RoamingTrail';
+import { SearchFilterBar } from './SearchFilterBar';
+import { useCompoundSearch } from '../hooks/useCompoundSearch';
+import { useTimeRangeFilter } from '../hooks/useTimeRangeFilter';
 import { identifyClient, lookupVendor, suggestDeviceType } from '../services/ouiLookup';
 import { toast } from 'sonner';
 import { useTableCustomization } from '@/hooks/useTableCustomization';
@@ -31,9 +33,36 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
   const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [siteFilter, setSiteFilter] = useState<string>('all');
-  const [sites, setSites] = useState<Site[]>([]);
-  const [isLoadingSites, setIsLoadingSites] = useState(false);
+
+  const { query: searchQuery, setQuery: setSearchQuery, filterRows: filterBySearch, hasActiveSearch } = useCompoundSearch<Station>({
+    storageKey: 'client-search',
+    fields: [
+      s => s.hostName,
+      s => s.macAddress,
+      s => s.ipAddress,
+      s => s.siteName,
+      s => s.apName || (s as any).apDisplayName || (s as any).apHostname,
+      s => (s as any).deviceType,
+      s => (s as any).manufacturer,
+      s => (s as any).username,
+      s => s.network || (s as any).ssid || (s as any).serviceName,
+      s => (s as any).vlan?.toString() || (s as any).vlanId?.toString(),
+      s => s.status,
+      s => (s as any).band || (s as any).frequencyBand,
+    ],
+  });
+
+  const { timeRange, setPreset: setTimePreset, setCustomRange, filterByTime } = useTimeRangeFilter('client-time-range');
+
+  // Site filter — persisted to sessionStorage
+  const [selectedSite, setSelectedSiteState] = useState<string>(() => {
+    try { return sessionStorage.getItem('client-site-filter') || 'all'; } catch { return 'all'; }
+  });
+  const setSelectedSite = (site: string) => {
+    setSelectedSiteState(site);
+    try { sessionStorage.setItem('client-site-filter', site); } catch {}
+  };
+
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStations, setSelectedStations] = useState<Set<string>>(new Set());
@@ -66,7 +95,6 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
 
   useEffect(() => {
     loadStations();
-    loadSites();
   }, []);
 
   const loadStations = async () => {
@@ -89,19 +117,6 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
       console.error('Error loading stations:', err);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const loadSites = async () => {
-    setIsLoadingSites(true);
-    try {
-      if (!apiService.isAuthenticated()) { setSites([]); return; }
-      const sitesData = await apiService.getSites();
-      setSites(Array.isArray(sitesData) ? sitesData : []);
-    } catch {
-      setSites([]);
-    } finally {
-      setIsLoadingSites(false);
     }
   };
 
@@ -165,9 +180,9 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
     }
   };
 
-  const filteredStations = stations.filter((station) => {
-    return siteFilter === 'all' || station.siteName === siteFilter;
-  });
+  const siteFiltered = selectedSite === 'all' ? stations : stations.filter(s => s.siteName === selectedSite || (s as any).siteId === selectedSite);
+  const searchFiltered = filterBySearch(siteFiltered);
+  const filteredStations = filterByTime(searchFiltered, (s) => (s as any).lastSeen || (s as any).associationTime);
 
   // Helper function to get sortable value for a column
   const getSortValue = (station: Station, columnKey: string): string | number => {
@@ -788,8 +803,8 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
       </Dialog>
 
       <Card className="surface-2dp">
-        <CardHeader>
-          <div className="flex items-center justify-between">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between mb-2">
             <CardTitle>Connected Clients</CardTitle>
             <SaveToWorkspace
               widgetId="connected-clients-table"
@@ -800,31 +815,20 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
               catalogId="table_clients_all"
             />
           </div>
-          <CardDescription>
-            Select clients using the checkboxes to manage their GDPR data rights
-          </CardDescription>
-          
-          <div className="flex items-center gap-3">
-            <Select value={siteFilter} onValueChange={setSiteFilter}>
-              <SelectTrigger className="w-44 h-10 shrink-0">
-                <SelectValue placeholder="All Sites" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sites</SelectItem>
-                {sites.map((site) => (
-                  <SelectItem key={site.id} value={site.name || site.siteName || site.id}>
-                    {site.name || site.siteName}
-                  </SelectItem>
-                ))}
-                {sites.length === 0 && !isLoadingSites && (
-                  <SelectItem value="no-sites" disabled>No sites available</SelectItem>
-                )}
-                {isLoadingSites && (
-                  <SelectItem value="loading" disabled>Loading sites...</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
+          <SearchFilterBar
+            searchPlaceholder="Search by hostname, MAC, IP, AP, site, SSID, device type..."
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            timePreset={timeRange.preset}
+            onTimePresetChange={setTimePreset}
+            onCustomRange={setCustomRange}
+            showSiteFilter={true}
+            sites={getUniqueSites().sort()}
+            selectedSite={selectedSite}
+            onSiteChange={setSelectedSite}
+            resultCount={filteredStations.length}
+            totalCount={stations.length}
+          />
         </CardHeader>
         <CardContent>
           {sortedStations.length === 0 ? (
@@ -832,7 +836,7 @@ function ConnectedClientsComponent({ onShowDetail }: ConnectedClientsProps) {
               <Users className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
               <h3 className="text-base font-medium mb-1">No Connected Clients Found</h3>
               <p className="text-sm text-muted-foreground">
-                {siteFilter !== 'all'
+                {hasActiveSearch
                   ? 'No clients match your current filters.'
                   : 'No clients are currently connected to the network.'}
               </p>

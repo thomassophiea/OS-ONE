@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -21,6 +20,8 @@ import { resolveClientIdentity, type ClientIdentity } from '../lib/clientIdentit
 import { toast } from 'sonner';
 import { SaveToWorkspace } from './SaveToWorkspace';
 import { ExportButton } from './ExportButton';
+import { SearchFilterBar } from './SearchFilterBar';
+import { useCompoundSearch } from '../hooks/useCompoundSearch';
 import { useTableCustomization } from '../hooks/useTableCustomization';
 import { DetailSlideOut } from './DetailSlideOut';
 import { DEVICE_MONITORING_COLUMNS } from '../config/deviceMonitoringColumns';
@@ -33,7 +34,26 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [selectedSite, setSelectedSite] = useState<string>('all');
+
+  const { query: searchQuery, setQuery: setSearchQuery, filterRows: filterBySearch, hasActiveSearch } = useCompoundSearch<Station>({
+    storageKey: 'client-search',
+    fields: [
+      s => s.hostName,
+      s => s.macAddress,
+      s => s.ipAddress,
+      s => s.siteName,
+      s => s.apName || (s as any).apDisplayName || (s as any).apHostname,
+      s => (s as any).deviceType,
+      s => (s as any).manufacturer,
+      s => (s as any).username,
+      s => s.network || (s as any).ssid || (s as any).serviceName,
+      s => (s as any).vlan?.toString() || (s as any).vlanId?.toString(),
+      s => s.status,
+      s => (s as any).band || (s as any).frequencyBand,
+    ],
+  });
+
+
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStations, setSelectedStations] = useState<Set<string>>(new Set());
@@ -317,10 +337,8 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     }
   };
 
-  // Filter stations by site
-  const filteredStations = stations.filter((station) => {
-    return selectedSite === 'all' || station.siteName === selectedSite;
-  });
+  // Filter stations by site, compound search, and time range
+  const filteredStations = filterBySearch(stations);
 
   // Sort filtered stations
   const sortedStations = [...filteredStations].sort((a, b) => {
@@ -382,7 +400,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedSite]);
+  }, [searchQuery]);
 
   const getUniqueStatuses = () => {
     const statuses = new Set(stations.map(station => station.status).filter(Boolean));
@@ -625,8 +643,42 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
         <div className="flex items-center space-x-2">
           <Button onClick={loadStations} variant="outline" size="sm" disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            {isLoading ? 'Refreshing...' : 'Refresh'}
+            Refresh Clients
           </Button>
+          <Button
+            onClick={() => loadTrafficStatisticsForCurrentPage(stations)}
+            variant="outline"
+            size="sm"
+            disabled={isLoadingTraffic}
+          >
+            <Activity className="mr-2 h-4 w-4" />
+            {isLoadingTraffic ? 'Loading...' : 'Refresh Traffic'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsColumnDialogOpen(true)}
+          >
+            <Columns className="mr-2 h-4 w-4" />
+            Customize Columns
+          </Button>
+          <ExportButton
+            data={sortedStations}
+            columns={[
+              { key: 'hostName', label: 'Hostname' },
+              { key: 'macAddress', label: 'MAC Address' },
+              { key: 'ipAddress', label: 'IP Address' },
+              { key: 'status', label: 'Status' },
+              { key: 'apName', label: 'Access Point' },
+              { key: 'ssid', label: 'SSID' },
+              { key: 'band', label: 'Band' },
+              { key: 'signalStrength', label: 'Signal (dBm)' },
+              { key: 'deviceType', label: 'Device Type' },
+              { key: 'siteName', label: 'Site' },
+            ]}
+            filename="connected-clients"
+            title="Connected Clients"
+          />
         </div>
       </div>
 
@@ -832,62 +884,15 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
       </Dialog>
 
       <Card className="surface-2dp">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Device Monitoring & Traffic Analytics</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsColumnDialogOpen(true)}
-              >
-                <Columns className="mr-2 h-4 w-4" />
-                Customize Columns
-              </Button>
-              <ExportButton
-                data={sortedStations}
-                columns={[
-                  { key: 'hostName', label: 'Hostname' },
-                  { key: 'macAddress', label: 'MAC Address' },
-                  { key: 'ipAddress', label: 'IP Address' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'apName', label: 'Access Point' },
-                  { key: 'ssid', label: 'SSID' },
-                  { key: 'band', label: 'Band' },
-                  { key: 'signalStrength', label: 'Signal (dBm)' },
-                  { key: 'deviceType', label: 'Device Type' },
-                  { key: 'siteName', label: 'Site' },
-                ]}
-                filename="connected-clients"
-                title="Connected Clients"
-              />
-              <SaveToWorkspace
-                widgetId="connected-clients-table"
-                widgetType="topn_table"
-                title="All Connected Clients"
-                endpointRefs={['clients.list']}
-                sourcePage="clients"
-                catalogId="table_clients_all"
-              />
-            </div>
-          </div>
-          <CardDescription>
-            Select clients using checkboxes to manage GDPR data rights. Click any client to view detailed connection information. Signal strength (RSS/RSSI) included.
-          </CardDescription>
-          
-          <div className="flex items-center gap-3">
-            <Select value={selectedSite} onValueChange={setSelectedSite}>
-              <SelectTrigger className="w-44 h-10 shrink-0">
-                <SelectValue placeholder="All Sites" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sites</SelectItem>
-                {getUniqueSites().map((site) => (
-                  <SelectItem key={site} value={site}>{site}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <CardHeader className="pb-3 pt-4">
+          <SearchFilterBar
+            searchPlaceholder="Search by hostname, MAC, IP, AP, site, SSID, device type..."
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            showTimeRange={false}
+            resultCount={filteredStations.length}
+            totalCount={stations.length}
+          />
         </CardHeader>
         <CardContent>
           {filteredStations.length === 0 ? (
@@ -895,7 +900,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
               <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">No Connected Clients Found</h3>
               <p className="text-muted-foreground">
-                {selectedSite !== 'all'
+                {hasActiveSearch
                   ? 'No clients match your current filters.'
                   : 'No clients are currently connected to the network.'}
               </p>
