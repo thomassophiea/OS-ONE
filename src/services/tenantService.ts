@@ -101,6 +101,12 @@ class TenantService {
       const savedOrg = localStorage.getItem(STORAGE_KEYS.CURRENT_ORG);
       if (savedOrg) {
         this.currentOrg = JSON.parse(savedOrg);
+        // Migrate stale org name from previous default
+        if (this.currentOrg && this.currentOrg.name === 'AURA Organization') {
+          this.currentOrg.name = 'TSOPHIEA';
+          this.currentOrg.slug = 'tsophiea';
+          this.saveToStorage();
+        }
       }
     } catch (error) {
       console.error('Failed to load tenant state from storage:', error);
@@ -387,11 +393,22 @@ class TenantService {
   // Current controller management
   setCurrentController(controller: Controller | null) {
     this.currentController = controller;
+
+    // Ensure a default organization exists so org-scoped features
+    // (Global Elements, etc.) work immediately after login.
+    if (controller && !this.currentOrg) {
+      this.currentOrg = {
+        id: controller.org_id || 'default-org',
+        name: 'TSOPHIEA',
+        slug: 'tsophiea',
+      };
+    }
+
     this.saveToStorage();
-    
+
     // Dispatch event for other components to react
-    window.dispatchEvent(new CustomEvent('controllerChanged', { 
-      detail: controller 
+    window.dispatchEvent(new CustomEvent('controllerChanged', {
+      detail: controller
     }));
   }
 

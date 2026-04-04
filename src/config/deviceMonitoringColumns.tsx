@@ -108,11 +108,11 @@ function getSignalStrengthIndicator(rss: number | undefined, radioId: number | u
 
   // RSSI is typically negative, closer to 0 is better (wireless only)
   if (rss >= -30) {
-    return { icon: Signal, color: 'text-green-500', label: `${rss} dBm`, quality: 'Excellent', bgColor: 'bg-green-500/10' };
+    return { icon: Signal, color: 'text-emerald-500', label: `${rss} dBm`, quality: 'Excellent', bgColor: 'bg-emerald-500/10' };
   } else if (rss >= -50) {
-    return { icon: SignalHigh, color: 'text-green-400', label: `${rss} dBm`, quality: 'Very Good', bgColor: 'bg-green-400/10' };
+    return { icon: SignalHigh, color: 'text-green-500', label: `${rss} dBm`, quality: 'Very Good', bgColor: 'bg-green-500/10' };
   } else if (rss >= -60) {
-    return { icon: SignalMedium, color: 'text-amber-500', label: `${rss} dBm`, quality: 'Good', bgColor: 'bg-amber-500/10' };
+    return { icon: SignalMedium, color: 'text-blue-500', label: `${rss} dBm`, quality: 'Good', bgColor: 'bg-blue-500/10' };
   } else if (rss >= -70) {
     return { icon: SignalLow, color: 'text-orange-500', label: `${rss} dBm`, quality: 'Fair', bgColor: 'bg-orange-500/10' };
   } else {
@@ -239,11 +239,12 @@ export const DEVICE_MONITORING_COLUMNS: ColumnConfig<StationWithTraffic>[] = [
     tooltip: 'Device hostname or identifier',
     renderCell: (station) => {
       const identity = resolveClientIdentity(station);
+      const isDerived = identity.identitySource === 'derived_label';
       return (
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 min-w-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="font-medium text-[11px] leading-none cursor-help truncate max-w-[100px]">
+              <span className={`text-[11px] leading-none cursor-help truncate max-w-[200px] ${isDerived ? 'text-muted-foreground italic' : 'font-medium'}`}>
                 {identity.displayName}
               </span>
             </TooltipTrigger>
@@ -252,6 +253,7 @@ export const DEVICE_MONITORING_COLUMNS: ColumnConfig<StationWithTraffic>[] = [
                 <p className="font-medium">{identity.displayName}</p>
                 {identity.deviceType && <p>{identity.deviceType}</p>}
                 {identity.manufacturer && <p className="text-muted-foreground">{identity.manufacturer}</p>}
+                {isDerived && <p className="text-xs text-muted-foreground italic">Derived from OUI vendor lookup</p>}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -548,7 +550,7 @@ export const DEVICE_MONITORING_COLUMNS: ColumnConfig<StationWithTraffic>[] = [
         <Tooltip>
           <TooltipTrigger asChild>
             <div className={`flex items-center gap-1 px-2 py-1 rounded-md transition-all duration-200 hover:scale-105 ${signalInfo.bgColor}`}>
-              <SignalIcon className={`h-2 w-2 ${signalInfo.color}`} />
+              <SignalIcon className={`h-3 w-3 ${signalInfo.color}`} />
               <span className={`text-[10px] font-medium ${signalInfo.color}`}>
                 {radioId === 20 ? signalInfo.label : (rssValue !== undefined ? `${rssValue}` : '-')}
               </span>

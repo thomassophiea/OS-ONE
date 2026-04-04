@@ -1,12 +1,12 @@
-import { useState, useEffect, lazy, Suspense, useMemo, startTransition } from 'react';
+import { useState, useEffect, lazy, Suspense, useMemo, useCallback, startTransition } from 'react';
 import { useGlobalFilters } from './hooks/useGlobalFilters';
 import type { AssistantContext } from './components/NetworkChatbot';
 import { LoginForm } from './components/LoginForm';
+import { SharedReportViewer } from './components/SharedReportViewer';
 import { Sidebar } from './components/Sidebar';
 import { MobileApp } from './components/mobile/MobileApp';
 import { DetailSlideOut } from './components/DetailSlideOut';
 import { PlaceholderPage } from './components/PlaceholderPage';
-import { PerformanceAnalytics } from './components/PerformanceAnalytics';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Lazy load route components for better performance with prefetch
@@ -27,12 +27,14 @@ const SLEDashboard = lazy(() => import('./components/sle/SLEDashboard').then(m =
 const AlertsEventsEnhanced = lazy(() => import('./components/AlertsEventsEnhanced').then(m => ({ default: m.AlertsEventsEnhanced })));
 const ReportWidgets = lazy(() => import('./components/ReportWidgets').then(m => ({ default: m.ReportWidgets })));
 const ConfigureNetworks = lazy(() => import('./components/ConfigureNetworks').then(m => ({ default: m.ConfigureNetworks })));
-const ConfigureSites = lazy(() => import('./components/ConfigureSites').then(m => ({ default: m.ConfigureSites })));
+const SitesAndGroupsPage = lazy(() => import('./components/SitesAndGroupsPage').then(m => ({ default: m.SitesAndGroupsPage })));
 const ConfigurePolicy = lazy(() => import('./components/ConfigurePolicy').then(m => ({ default: m.ConfigurePolicy })));
 const ConfigureAAAPolicies = lazy(() => import('./components/ConfigureAAAPolicies').then(m => ({ default: m.ConfigureAAAPolicies })));
 const ConfigureAdoptionRules = lazy(() => import('./components/ConfigureAdoptionRules').then(m => ({ default: m.ConfigureAdoptionRules })));
 const ConfigureGuest = lazy(() => import('./components/ConfigureGuest').then(m => ({ default: m.ConfigureGuest })));
 const ConfigureAdvanced = lazy(() => import('./components/ConfigureAdvanced').then(m => ({ default: m.ConfigureAdvanced })));
+const GlobalElementsPage = lazy(() => import('./components/global-elements/GlobalElementsPage').then(m => ({ default: m.GlobalElementsPage })));
+const SiteGroupSettingsPage = lazy(() => import('./components/SiteGroupSettingsPage').then(m => ({ default: m.SiteGroupSettingsPage })));
 const Administration = lazy(() => import('./components/Administration').then(m => ({ default: m.Administration })));
 const Tools = lazy(() => import('./components/Tools').then(m => ({ default: m.Tools })));
 const ApiTestTool = lazy(() => import('./components/ApiTestTool').then(m => ({ default: m.ApiTestTool })));
@@ -51,9 +53,15 @@ const SecurityDashboard = lazy(() => import('./components/SecurityDashboard').th
 const GuestManagement = lazy(() => import('./components/GuestManagement').then(m => ({ default: m.GuestManagement })));
 const ApiDocumentation = lazy(() => import('./components/ApiDocumentation').then(m => ({ default: m.ApiDocumentation })));
 const Workspace = lazy(() => import('./components/Workspace').then(m => ({ default: m.Workspace })));
+const ReportCenter = lazy(() => import('./components/ReportCenter').then(m => ({ default: m.ReportCenter })));
 const HelpPage = lazy(() => import('./components/HelpPage').then(m => ({ default: m.HelpPage })));
+const PerformanceAnalytics = lazy(() => import('./components/PerformanceAnalytics').then(m => ({ default: m.PerformanceAnalytics })));
 import { apiService, ApiCallLog } from './services/api';
+// reportConfigPersistence imported by SharedReportViewer directly
 import { AppContextProvider } from './contexts/AppContext';
+import type { NavigationScope } from './config/navigationScopes';
+import { ORG_PAGES, SITE_GROUP_PAGES } from './config/navigationScopes';
+import type { GlobalElementType } from './types/globalElements';
 import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
 import { PageSkeleton, getSkeletonVariant } from './components/ui/PageSkeleton';
@@ -63,7 +71,11 @@ import { AppsMenu } from './components/AppsMenu';
 import { UserMenu } from './components/UserMenu';
 import { NotificationsMenu } from './components/NotificationsMenu';
 import { tenantService } from './services/tenantService';
-import { DevModePanel } from './components/DevModePanel';
+import { DevToolsPanel } from './components/DevToolsPanel';
+import { SiteGroupFilterDropdown } from './components/SiteGroupFilterDropdown';
+import { PersonaProvider, readStoredPersona, PERSONA_STORAGE_KEY } from './contexts/PersonaContext';
+import { PersonaSelector } from './components/PersonaSelector';
+import { PERSONA_MAP, type PersonaId } from './config/personaDefinitions';
 import { VersionDisplay } from './components/VersionDisplay';
 import { toast } from 'sonner';
 import { applyTheme as applyThemeColors } from './lib/themes';
@@ -71,7 +83,7 @@ import { useDeviceDetection } from './hooks/useDeviceDetection';
 
 const pageInfo = {
   'workspace': { title: 'Workspace', description: 'Create custom widgets for Devices, Clients, Licensing, and Alerts' },
-  'service-levels': { title: 'Contextual Insights', description: 'Context-aware network monitoring and analytics' },
+  'service-levels': { title: 'Insights', description: 'Context-aware network monitoring and analytics' },
   'sle-dashboard': { title: 'Service Levels', description: 'SLE metrics with drill-down classifier analysis' },
   'app-insights': { title: 'App Insights', description: 'Application visibility and traffic analytics' },
   'connected-clients': { title: 'Connected Clients', description: 'View and manage connected devices' },
@@ -95,21 +107,25 @@ const pageInfo = {
   'administration': { title: 'Administration', description: 'System administration, users, applications, and licensing' },
   'api-test': { title: 'API Test Tool', description: 'Test and explore API endpoints' },
   'api-documentation': { title: 'API Documentation', description: 'AURA Mobility Core REST API reference' },
-  'configure-sites': { title: 'Sites & Site Groups', description: 'Manage sites, site groups, and network locations' },
+  'configure-sites-groups': { title: 'Sites & Groups', description: 'Manage site groups, controller pairs, and network sites' },
   'configure-networks': { title: 'Configure Networks', description: 'Set up and manage network configurations' },
   'configure-advanced': { title: 'Advanced Configuration', description: 'Topologies, QoS, AP Profiles, IoT, Mesh, Access Control, and Location Services' },
+  'global-templates': { title: 'Global Templates', description: 'Manage configuration templates with variable substitution' },
+  'global-variables': { title: 'Global Variables', description: 'Define and manage variables for template resolution' },
+  'site-group-settings': { title: 'Site Group Settings', description: 'Configure site group connection, variables, and deployment preferences' },
   'help': { title: 'Help & Support', description: 'Get assistance with the EDGE platform using AI' },
 };
 
 interface DetailPanelState {
   isOpen: boolean;
-  type: 'access-point' | 'client' | 'site' | null;
+  type: 'access-point' | 'client' | 'site' | 'site-group' | null;
   data: any;
 }
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentPage, setCurrentPage] = useState('sle-dashboard');
+  const [currentPage, setCurrentPage] = useState('workspace');
+  const [navigationScope, setNavigationScope] = useState<NavigationScope>('global');
   const [adminRole, setAdminRole] = useState<string | null>(null);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -125,9 +141,28 @@ export default function App() {
     return localStorage.getItem('networkAssistantEnabled') === 'true';
   });
   const [isDevModeOpen, setIsDevModeOpen] = useState(false);
+  const [activePersona, setActivePersonaRaw] = useState<PersonaId>(readStoredPersona);
+  const setActivePersona = useCallback((id: PersonaId) => {
+    setActivePersonaRaw(id);
+    localStorage.setItem(PERSONA_STORAGE_KEY, id);
+  }, []);
+  const personaAllowedPages = useMemo(() => {
+    if (theme !== 'dev' || activePersona === 'super-user') return null;
+    const def = PERSONA_MAP.get(activePersona);
+    return def ? new Set(def.allowedPages) : null;
+  }, [theme, activePersona]);
+  const isPageAllowedByPersona = useCallback((pageId: string): boolean => {
+    if (!personaAllowedPages) return true;
+    return personaAllowedPages.has(pageId);
+  }, [personaAllowedPages]);
   const [apiLogs, setApiLogs] = useState<ApiCallLog[]>([]);
   const [devPanelHeight, setDevPanelHeight] = useState(0);
   const [siteName, setSiteName] = useState<string>('');
+  const [pendingTemplateType, setPendingTemplateType] = useState<GlobalElementType | null>(null);
+
+  // Legacy cross-page filter removed — now handled inside SitesAndGroupsPage tabs
+
+  // Shared report links handled before auth gate via SharedReportViewer
 
   // Global filters for site context
   const { filters, updateFilter } = useGlobalFilters();
@@ -258,7 +293,7 @@ export default function App() {
       console.log('Session expired - logging out user');
       setIsAuthenticated(false);
       setAdminRole(null);
-      setCurrentPage('service-levels');
+      setCurrentPage('workspace');
       // Cancel any pending requests
       apiService.cancelAllRequests();
       toast.error('Session expired', {
@@ -693,20 +728,35 @@ export default function App() {
     await apiService.logout();
     setIsAuthenticated(false);
     setAdminRole(null);
-    setCurrentPage('service-levels');
+    setCurrentPage('workspace');
   };
 
   const handlePageChange = (page: string) => {
+    // Persona gating: block navigation to pages outside the active persona
+    if (!isPageAllowedByPersona(page)) return;
+
     // Cancel any pending API requests when switching pages
     console.log(`Switching to page: ${page}, canceling pending requests`);
     apiService.cancelAllRequests();
-    
+
+    // Auto-switch scope based on page classification
+    if (ORG_PAGES.has(page) && navigationScope !== 'global') {
+      setNavigationScope('global');
+    } else if (SITE_GROUP_PAGES.has(page) && navigationScope !== 'site-group') {
+      setNavigationScope('site-group');
+    }
+
     // Use startTransition to keep old content visible while loading new page
     startTransition(() => {
       setCurrentPage(page);
     });
     // Close detail panel when changing pages
     setDetailPanel({ isOpen: false, type: null, data: null });
+  };
+
+  const handleTemplateCreation = (elementType: GlobalElementType) => {
+    setPendingTemplateType(elementType);
+    handlePageChange('global-templates');
   };
 
   const handleShowAccessPointDetail = (serialNumber: string, displayName?: string) => {
@@ -732,6 +782,8 @@ export default function App() {
       data: { siteId, siteName }
     });
   };
+
+  // Navigation between site groups and sites is now handled within SitesAndGroupsPage tabs
 
   // Toggle Network Assistant preference
   const handleToggleNetworkAssistant = (enabled: boolean) => {
@@ -799,10 +851,19 @@ export default function App() {
     toast.success('API logs cleared');
   };
 
+  // ── Shared Report Viewer: renders outside the main app shell ──
+  // When a #/report/ hash is present, show the standalone report viewer
+  // with its own login flow — no sidebar, no nav, just the report.
+  const reportHash = window.location.hash;
+  if (reportHash.startsWith('#/report/')) {
+    const payload = reportHash.slice('#/report/'.length);
+    return <SharedReportViewer payload={payload} />;
+  }
+
   if (!isAuthenticated) {
     return (
-      <LoginForm 
-        onLoginSuccess={handleLoginSuccess} 
+      <LoginForm
+        onLoginSuccess={handleLoginSuccess}
         theme={theme}
         onThemeToggle={toggleTheme}
       />
@@ -810,9 +871,14 @@ export default function App() {
   }
 
   const renderPage = () => {
+    // Persona gating: redirect to workspace if current page is not allowed
+    if (!isPageAllowedByPersona(currentPage)) {
+      startTransition(() => setCurrentPage('workspace'));
+      return null;
+    }
     switch (currentPage) {
       case 'workspace':
-        return <Workspace api={apiService} />;
+        return <ReportCenter />;
       case 'service-levels':
         return <DashboardEnhanced />;
       case 'sle-dashboard':
@@ -883,8 +949,18 @@ export default function App() {
         return <ConfigureGuest />;
       case 'configure-advanced':
         return <ConfigureAdvanced />;
-      case 'configure-sites':
-        return <ConfigureSites onShowDetail={handleShowSiteDetail} />;
+      case 'global-templates':
+        return <GlobalElementsPage initialTab="templates" initialElementType={pendingTemplateType ?? undefined} onConsumeElementType={() => setPendingTemplateType(null)} />;
+      case 'global-variables':
+        return <GlobalElementsPage initialTab="variables" />;
+      case 'site-group-settings':
+        return <SiteGroupSettingsPage />;
+      case 'configure-sites-groups':
+        return (
+          <SitesAndGroupsPage
+            onShowSiteDetail={handleShowSiteDetail}
+          />
+        );
       case 'tools':
         return <Tools />;
       case 'administration':
@@ -904,7 +980,7 @@ export default function App() {
         const info = pageInfo[currentPage as keyof typeof pageInfo];
         if (!info) {
           // If page info doesn't exist, redirect to service levels and show placeholder
-          setCurrentPage('service-levels');
+          setCurrentPage('workspace');
           return <PlaceholderPage title="Page Not Found" description="The requested page is not available. Redirecting to Service Levels." />;
         }
         return <PlaceholderPage title={info.title} description={info.description} />;
@@ -959,6 +1035,21 @@ export default function App() {
             </Suspense>
           </DetailSlideOut>
         );
+      case 'site-group':
+        return (
+          <DetailSlideOut
+            isOpen={detailPanel.isOpen}
+            onClose={handleCloseDetailPanel}
+            title={detailPanel.data.siteGroupName || 'Site Group Details'}
+            description="Controller pair details and site assignments"
+            width="lg"
+          >
+            {/* Site group detail is rendered inline in SiteGroupsPage */}
+            <div className="py-4 text-center text-muted-foreground text-sm">
+              Open the Site Groups page and click a row to see details.
+            </div>
+          </DetailSlideOut>
+        );
       default:
         return null;
     }
@@ -981,7 +1072,8 @@ export default function App() {
   }
 
   return (
-    <AppContextProvider>
+    <AppContextProvider navigationScope={navigationScope} onNavigationScopeChange={setNavigationScope} onPageChange={handlePageChange} onTemplateCreation={handleTemplateCreation}>
+    <PersonaProvider theme={theme} activePersona={activePersona} setActivePersona={setActivePersona}>
     <>
       {/* Unified floating-card layout — all themes */}
       <div
@@ -1007,12 +1099,20 @@ export default function App() {
             <span className="text-muted-foreground" style={{ fontWeight: 400 }}>Platform ONE™ | Networking</span>
           </span>
           <div style={{ flex: 1 }} />
+          {navigationScope === 'global' && <SiteGroupFilterDropdown />}
           {(() => {
             const controller = tenantService.getCurrentController();
             const org = tenantService.getCurrentOrganization();
+            if (navigationScope === 'global') {
+              return (
+                <span className="text-muted-foreground text-xs font-semibold bg-background border border-border rounded px-2 py-0.5" style={{ letterSpacing: '0.08em', flexShrink: 0 }}>
+                  {(org?.name || 'AURA').toUpperCase()}
+                </span>
+              );
+            }
             const siteLabel = (controller?.name || org?.name || 'Extreme Networks').toUpperCase();
             return (
-              <span className="text-muted-foreground text-xs font-semibold bg-background border border-border rounded px-2 py-0.5" style={{ letterSpacing: '0.08em', flexShrink: 0 }}>
+              <span className="text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded px-2 py-0.5" style={{ letterSpacing: '0.08em', flexShrink: 0 }}>
                 {siteLabel}
               </span>
             );
@@ -1022,6 +1122,7 @@ export default function App() {
           <div className="flex items-center gap-1 ml-auto">
             {!device.isMobile && theme === 'dev' && (
               <>
+                <PersonaSelector />
                 <Button variant={isDevModeOpen ? 'default' : 'ghost'} size="sm" onClick={handleToggleDevMode} title="Developer Mode - API Monitor">
                   <Braces className="h-4 w-4" />
                 </Button>
@@ -1090,9 +1191,9 @@ export default function App() {
         />
       )}
 
-      {/* Developer Mode Panel - Desktop only */}
+      {/* Developer Tools Panel - Desktop only */}
       {!device.isMobile && (
-        <DevModePanel
+        <DevToolsPanel
           isOpen={isDevModeOpen}
           onClose={() => setIsDevModeOpen(false)}
           apiLogs={apiLogs}
@@ -1103,6 +1204,7 @@ export default function App() {
       {/* Version Display - Fixed to bottom-left */}
       <VersionDisplay position="bottom-left" />
     </>
+    </PersonaProvider>
     </AppContextProvider>
   );
 }

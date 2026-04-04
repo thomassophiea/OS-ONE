@@ -69,6 +69,8 @@ import { OSOneWidget } from './OSOneWidget';
 import { AccessPointDetail } from './AccessPointDetail';
 import { ClientDetail } from './ClientDetail';
 import { recordNetworkMetrics } from '../services/aiBaselineService';
+import { usePersonaContext } from '../contexts/PersonaContext';
+import { isSectionVisible, PERSONA_DASHBOARD_CONFIG, type DashboardSection } from '../config/personaDashboardConfig';
 
 interface AccessPoint {
   serialNumber: string;
@@ -166,6 +168,11 @@ interface Notification {
 function DashboardEnhancedComponent() {
   // Global filters for site/time filtering
   const { filters, updateFilter } = useGlobalFilters();
+
+  // Persona-aware section visibility (dev mode)
+  const { activePersona } = usePersonaContext();
+  const personaConfig = PERSONA_DASHBOARD_CONFIG[activePersona];
+  const showSection = useCallback((section: DashboardSection) => isSectionVisible(activePersona, section), [activePersona]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1526,6 +1533,11 @@ function DashboardEnhancedComponent() {
           <div className="flex items-center gap-2">
             <Brain className="h-6 w-6 text-purple-500" />
             <h2 className="text-xl font-semibold">AI-Powered Network Insights</h2>
+            {activePersona !== 'super-user' && personaConfig && (
+              <Badge className={`text-xs border ${personaConfig.accentClass}`}>
+                {personaConfig.dashboardLabel}
+              </Badge>
+            )}
           </div>
           {lastUpdate && (
             <span className="text-sm text-muted-foreground">
@@ -1866,7 +1878,7 @@ function DashboardEnhancedComponent() {
               onClick={() => setHealthViewMode('sites')}
               className={`px-4 py-2 rounded-md transition-colors text-base font-medium ${
                 healthViewMode === 'sites'
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
@@ -1876,7 +1888,7 @@ function DashboardEnhancedComponent() {
               onClick={() => setHealthViewMode('devices')}
               className={`px-4 py-2 rounded-md transition-colors text-base font-medium ${
                 healthViewMode === 'devices'
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
@@ -1886,7 +1898,7 @@ function DashboardEnhancedComponent() {
               onClick={() => setHealthViewMode('clients')}
               className={`px-4 py-2 rounded-md transition-colors text-base font-medium ${
                 healthViewMode === 'clients'
-                  ? 'bg-teal-600 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
@@ -2820,6 +2832,7 @@ function DashboardEnhancedComponent() {
         (selectorTab === 'switch' && !selectedEntityId)) && (
       <>
       {/* SECTION 1: OPERATIONAL CONTEXT SUMMARY */}
+      {showSection('operational-context') && (
       <div className="space-y-4">
         <div className="border-b pb-2">
           <h3 className="text-lg font-semibold">
@@ -2835,10 +2848,12 @@ function DashboardEnhancedComponent() {
         </div>
         <OperationalContextSummary />
       </div>
+      )}
 
       {/* ========================================
           SECTION 2: CORE OPERATIONAL ACTIVITY
           ======================================== */}
+      {showSection('core-activity') && (
       <div className="space-y-4">
         <div className="border-b pb-2">
           <h3 className="text-lg font-semibold">Core Operational Activity</h3>
@@ -2848,17 +2863,15 @@ function DashboardEnhancedComponent() {
         {/* Key Metrics Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Total APs */}
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Access Points</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-blue shadow-md group-hover:scale-110 transition-transform">
               <Wifi className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{apStats.total}</div>
+            <div className="text-2xl font-bold text-foreground">{apStats.total}</div>
             <div className="flex flex-col gap-1.5 mt-2">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[color:var(--status-success)] border-[color:var(--status-success)] text-xs">
@@ -2900,17 +2913,15 @@ function DashboardEnhancedComponent() {
         </Card>
 
         {/* Connected Clients */}
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl group-hover:bg-violet-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Connected Clients</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-violet shadow-md group-hover:scale-110 transition-transform">
               <Users className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">{clientStats.total}</div>
+            <div className="text-2xl font-bold text-foreground">{clientStats.total}</div>
             <div className="flex flex-col gap-1.5 mt-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Authenticated</span>
@@ -2929,20 +2940,18 @@ function DashboardEnhancedComponent() {
         </Card>
 
         {/* Network Throughput */}
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm flex items-center gap-1.5 font-semibold">
               Network Throughput
               <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" title={TOOLTIPS.REAL_TIME_THROUGHPUT} />
             </CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-green shadow-md group-hover:scale-110 transition-transform">
               <Activity className="h-3.5 w-3.5 text-white animate-pulse" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">{formatBps(clientStats.throughputUpload + clientStats.throughputDownload)}</div>
+            <div className="text-2xl font-bold text-foreground">{formatBps(clientStats.throughputUpload + clientStats.throughputDownload)}</div>
             <p className="text-xs text-muted-foreground">Total network traffic (Mbps/Gbps)</p>
             
             {/* Upload/Download Stats */}
@@ -3004,17 +3013,15 @@ function DashboardEnhancedComponent() {
         </Card>
 
         {/* Active Alerts */}
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Active Alerts</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-amber shadow-md group-hover:scale-110 transition-transform">
               <AlertTriangle className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">{alertCounts.critical + alertCounts.warning}</div>
+            <div className="text-2xl font-bold text-foreground">{alertCounts.critical + alertCounts.warning}</div>
             <div className="flex flex-col gap-1.5 mt-2">
               <div className="flex gap-2">
                 {alertCounts.critical > 0 && (
@@ -3051,10 +3058,12 @@ function DashboardEnhancedComponent() {
 
         </div>
       </div>
+      )}
 
       {/* ========================================
           SECTION 3: PERFORMANCE AND QUALITY
           ======================================== */}
+      {showSection('performance') && (
       <div className="space-y-4">
         <div className="border-b pb-2">
           <h3 className="text-lg font-semibold">Performance and Quality</h3>
@@ -3351,9 +3360,12 @@ function DashboardEnhancedComponent() {
         </div>
       </div>
 
+      )}
+
       {/* ========================================
           SECTION 4: BEST PRACTICE EVALUATION
           ======================================== */}
+      {showSection('best-practices') && (
       <div className="space-y-4">
         <div className="border-b pb-2">
           <h3 className="text-lg font-semibold">Best Practice Evaluation</h3>
@@ -3361,9 +3373,10 @@ function DashboardEnhancedComponent() {
         </div>
         <BestPracticesWidget />
       </div>
+      )}
 
       {/* Top Clients */}
-      {topClients.length > 0 && (
+      {showSection('top-clients') && topClients.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -3527,7 +3540,7 @@ function DashboardEnhancedComponent() {
       )}
 
       {/* Poor Services Alert */}
-      {poorServices.length > 0 && (
+      {showSection('services-health') && poorServices.length > 0 && (
         <Card className="border-[color:var(--status-warning)]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -3562,7 +3575,7 @@ function DashboardEnhancedComponent() {
       )}
 
       {/* Recent Alerts Preview */}
-      {notifications.length > 0 && (
+      {showSection('alerts') && notifications.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -3614,7 +3627,7 @@ function DashboardEnhancedComponent() {
       )}
 
       {/* Phase 1 Widgets: Venue Statistics */}
-      {filters.site && filters.site !== 'all' && (
+      {showSection('venue-stats') && filters.site && filters.site !== 'all' && (
         <VenueStatisticsWidget
           siteId={filters.site}
           duration={filters.timeRange === '15m' ? '15M' :
@@ -3625,16 +3638,15 @@ function DashboardEnhancedComponent() {
       )}
 
       {/* Phase 5+ Widgets: Configuration Profiles and Audit Logs */}
+      {(showSection('config-profiles') || showSection('audit-logs')) && (
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Configuration Profiles Widget */}
-        <ConfigurationProfilesWidget />
-
-        {/* Audit Logs Widget */}
-        <AuditLogsWidget />
+        {showSection('config-profiles') && <ConfigurationProfilesWidget />}
+        {showSection('audit-logs') && <AuditLogsWidget />}
       </div>
+      )}
 
       {/* OS ONE Control - System Information */}
-      <OSOneWidget compact={true} />
+      {showSection('os-one') && <OSOneWidget compact={true} />}
       </>
       )}
 

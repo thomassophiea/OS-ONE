@@ -8,6 +8,7 @@ import {
   Menu,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Cog,
   Network,
   Shield,
@@ -32,7 +33,8 @@ import {
   LayoutDashboard,
   HelpCircle,
   Target,
-  Building2
+  Building2,
+  Globe,
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import extremeNetworksLogo from 'figma:asset/cc372b1d703a0b056a9f8c590da6c8e1cb4947fd.png';
@@ -46,6 +48,8 @@ import { useDeviceDetection } from '@/hooks/useDeviceDetection';
 import { useEffect } from 'react';
 import { prefetchComponent } from '@/lib/prefetch';
 import { tenantService } from '../services/tenantService';
+import { useAppContext } from '@/contexts/AppContext';
+import { usePersonaContext } from '@/contexts/PersonaContext';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -56,10 +60,9 @@ interface SidebarProps {
   onThemeToggle?: () => void;
 }
 
-// Navigation items
-const navigationItems = [
-  { id: 'workspace', label: 'Workspace', icon: LayoutDashboard, badge: 'Sandbox' },
-  { id: 'service-levels', label: 'Contextual Insights', icon: Brain, badge: 'Sandbox' },
+// ── Org-level navigation (primary scope) ──
+const monitoringItems = [
+  { id: 'service-levels', label: 'Insights', icon: Brain, badge: 'Sandbox' },
   { id: 'sle-dashboard', label: 'Service Levels', icon: Target },
   { id: 'app-insights', label: 'App Insights', icon: AppWindow },
   { id: 'connected-clients', label: 'Connected Clients', icon: Users },
@@ -67,26 +70,32 @@ const navigationItems = [
   { id: 'report-widgets', label: 'Report Widgets', icon: BarChart3 },
 ];
 
-// Configure items
 const configureItems = [
-  { id: 'configure-sites', label: 'Sites & Site Groups', icon: Building2 },
+  { id: 'configure-sites-groups', label: 'Sites & Groups', icon: Building2 },
   { id: 'configure-networks', label: 'Networks', icon: Network },
   { id: 'configure-policy', label: 'Policy', icon: Shield },
   { id: 'configure-aaa-policies', label: 'AAA Policies', icon: UserCheck },
   { id: 'configure-guest', label: 'Guest', icon: UserPlus },
   { id: 'configure-advanced', label: 'Advanced', icon: Settings },
+  { id: 'configure-adoption-rules', label: 'Adoption Rules', icon: Zap },
+  { id: 'global-templates', label: 'Templates', icon: Layers },
+  { id: 'global-variables', label: 'Variables', icon: Braces },
 ];
 
-// System Management items
-const systemItems = [
-  { id: 'system-backup', label: 'Backup & Storage', icon: Database },
-  { id: 'license-dashboard', label: 'License Management', icon: Key },
-  { id: 'firmware-manager', label: 'Firmware Manager', icon: Download },
-  { id: 'network-diagnostics', label: 'Network Diagnostics', icon: Activity },
+const operationsItems = [
   { id: 'event-alarm-dashboard', label: 'Events & Alarms', icon: Bell },
   { id: 'security-dashboard', label: 'Security', icon: Shield },
   { id: 'pci-report', label: 'PCI DSS Report', icon: FileCheck },
-  { id: 'guest-management', label: 'Guest Access', icon: UserPlus },
+];
+
+// ── Site-group scope (controller drill-down only) ──
+const controllerItems = [
+  { id: 'system-backup', label: 'Backup & Storage', icon: Database },
+  { id: 'firmware-manager', label: 'Firmware Manager', icon: Download },
+  { id: 'network-diagnostics', label: 'Network Diagnostics', icon: Activity },
+  { id: 'license-dashboard', label: 'License Management', icon: Key },
+  { id: 'site-group-settings', label: 'Controller Settings', icon: Cog },
+  { id: 'guest-management', label: 'Guest Accounts', icon: UserPlus },
 ];
 
 export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme = 'ep1', onThemeToggle }: SidebarProps) {
@@ -95,14 +104,25 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
   const branding = useBranding();
   const device = useDeviceDetection();
   const org = tenantService.getCurrentOrganization();
+  const { navigationScope, siteGroup, exitSiteGroup } = useAppContext();
+  const { filterItems, isPageAllowed } = usePersonaContext();
 
-  // Check if any configure sub-item is currently active
-  const isConfigureActive = configureItems.some(item => currentPage === item.id);
-  const isSystemActive = systemItems.some(item => currentPage === item.id);
+  // Filter nav items by active persona
+  const filteredMonitoringItems = filterItems(monitoringItems);
+  const filteredConfigureItems = filterItems(configureItems);
+  const filteredOperationsItems = filterItems(operationsItems);
+  const filteredControllerItems = filterItems(controllerItems);
+
+  // Check if any section sub-item is currently active
+  const isMonitoringActive = filteredMonitoringItems.some(item => currentPage === item.id);
+  const isConfigureActive = filteredConfigureItems.some(item => currentPage === item.id);
+  const isOperationsActive = filteredOperationsItems.some(item => currentPage === item.id);
+  const isControllerActive = filteredControllerItems.some(item => currentPage === item.id);
 
   // Auto-expand sections if an item is active
+  const [isMonitoringExpanded, setIsMonitoringExpanded] = useState(true);
   const [isConfigureExpanded, setIsConfigureExpanded] = useState(isConfigureActive);
-  const [isSystemExpanded, setIsSystemExpanded] = useState(isSystemActive);
+  const [isOperationsExpanded, setIsOperationsExpanded] = useState(isOperationsActive);
 
   // Close mobile sidebar when page changes
   useEffect(() => {
@@ -128,6 +148,71 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
       setIsMobileOpen(false);
     }
   };
+
+  // Reusable collapsible section renderer
+  const renderCollapsibleSection = ({
+    label, icon: SectionIcon, items, isActive, isExpanded, onToggle,
+  }: {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    items: Array<{ id: string; label: string; icon: React.ComponentType<{ className?: string }>; badge?: string }>;
+    isActive: boolean;
+    isExpanded: boolean;
+    onToggle: () => void;
+  }) => (
+    <div className="space-y-1">
+      <Button
+        variant={isActive ? "default" : "ghost"}
+        className={cn(
+          "w-full justify-start h-10",
+          isCollapsed ? "px-2" : "px-3",
+          isActive
+            ? "bg-sidebar-primary text-sidebar-primary-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        )}
+        onClick={() => { if (!isCollapsed) onToggle(); }}
+      >
+        <SectionIcon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+        {!isCollapsed && (
+          <>
+            <span className="flex-1 text-left">{label}</span>
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </>
+        )}
+      </Button>
+      {!isCollapsed && isExpanded && (
+        <div className="ml-6 space-y-1">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Button
+                key={item.id}
+                variant={currentPage === item.id ? "default" : "ghost"}
+                className={cn(
+                  "w-full justify-start h-9 text-sm px-3",
+                  currentPage === item.id
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                onClick={() => handlePageChange(item.id)}
+                onMouseEnter={() => prefetchComponent(item.id)}
+              >
+                <Icon className="h-3 w-3 mr-2" />
+                <span className="flex items-center gap-2">
+                  {item.label}
+                  {item.badge && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] font-medium uppercase tracking-wide">
+                      {item.badge}
+                    </span>
+                  )}
+                </span>
+              </Button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -192,204 +277,144 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1">
-        {navigationItems.map((item) => {
-          const Icon = item.icon;
-          return (
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        {navigationScope === 'global' && (
+          <>
+            {/* Report Studio — top-level item */}
             <Button
-              key={item.id}
-              variant={currentPage === item.id ? "default" : "ghost"}
+              variant={currentPage === 'workspace' ? "default" : "ghost"}
               className={cn(
                 "w-full justify-start h-10",
                 isCollapsed ? "px-2" : "px-3",
-                currentPage === item.id
+                currentPage === 'workspace'
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
-              onClick={() => handlePageChange(item.id)}
-              onMouseEnter={() => prefetchComponent(item.id)}
+              onClick={() => handlePageChange('workspace')}
+              onMouseEnter={() => prefetchComponent('workspace')}
             >
-              <Icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+              <LayoutDashboard className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
               {!isCollapsed && (
                 <span className="flex items-center gap-2">
-                  {item.label}
-                  {item.badge && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] font-medium uppercase tracking-wide">
-                      {item.badge}
-                    </span>
-                  )}
+                  Report Studio
                 </span>
               )}
             </Button>
-          );
-        })}
-        
-        {/* Configure Section */}
-        <div className="space-y-1">
-          <Button
-            variant={isConfigureActive ? "default" : "ghost"}
-            className={cn(
-              "w-full justify-start h-10",
-              isCollapsed ? "px-2" : "px-3",
-              isConfigureActive 
-                ? "bg-sidebar-primary text-sidebar-primary-foreground" 
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-            onClick={() => {
-              if (!isCollapsed) {
-                setIsConfigureExpanded(!isConfigureExpanded);
-              }
-            }}
-          >
-            <Cog className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            {!isCollapsed && (
+
+            {/* Monitoring Section */}
+            {filteredMonitoringItems.length > 0 && renderCollapsibleSection({
+              label: 'Monitoring',
+              icon: BarChart3,
+              items: filteredMonitoringItems,
+              isActive: isMonitoringActive,
+              isExpanded: isMonitoringExpanded,
+              onToggle: () => setIsMonitoringExpanded(!isMonitoringExpanded),
+            })}
+
+            {/* Configure Section */}
+            {filteredConfigureItems.length > 0 && renderCollapsibleSection({
+              label: 'Configure',
+              icon: Cog,
+              items: filteredConfigureItems,
+              isActive: isConfigureActive,
+              isExpanded: isConfigureExpanded,
+              onToggle: () => setIsConfigureExpanded(!isConfigureExpanded),
+            })}
+
+            {/* Operations Section - Desktop only */}
+            {!device.isMobile && filteredOperationsItems.length > 0 && renderCollapsibleSection({
+              label: 'Operations',
+              icon: Bell,
+              items: filteredOperationsItems,
+              isActive: isOperationsActive,
+              isExpanded: isOperationsExpanded,
+              onToggle: () => setIsOperationsExpanded(!isOperationsExpanded),
+            })}
+
+            {/* Desktop-only: Tools and Administration */}
+            {!device.isMobile && (
               <>
-                <span className="flex-1 text-left">Configure</span>
-                {isConfigureExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
+                {isPageAllowed('tools') && (
+                  <Button
+                    variant={currentPage === 'tools' ? "default" : "ghost"}
+                    className={cn(
+                      "w-full justify-start h-10",
+                      isCollapsed ? "px-2" : "px-3",
+                      currentPage === 'tools'
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    onClick={() => handlePageChange('tools')}
+                  >
+                    <Wrench className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+                    {!isCollapsed && <span>Tools</span>}
+                  </Button>
+                )}
+                {isPageAllowed('administration') && (
+                  <Button
+                    variant={currentPage === 'administration' ? "default" : "ghost"}
+                    className={cn(
+                      "w-full justify-start h-10",
+                      isCollapsed ? "px-2" : "px-3",
+                      currentPage === 'administration'
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    )}
+                    onClick={() => handlePageChange('administration')}
+                  >
+                    <Settings className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+                    {!isCollapsed && <span>Administration</span>}
+                  </Button>
                 )}
               </>
             )}
-          </Button>
-          
-          {/* Configure Sub-items */}
-          {!isCollapsed && isConfigureExpanded && (
-            <div className="ml-6 space-y-1">
-              {configureItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={currentPage === item.id ? "default" : "ghost"}
-                    className={cn(
-                      "w-full justify-start h-9 text-sm",
-                      "px-3",
-                      currentPage === item.id
-                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    )}
-                    onClick={() => handlePageChange(item.id)}
-                    onMouseEnter={() => prefetchComponent(item.id)}
-                  >
-                    <Icon className="h-3 w-3 mr-2" />
-                    <span>{item.label}</span>
-                  </Button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* System Section - Desktop only */}
-        {!device.isMobile && (
-          <div className="space-y-1">
-            <Button
-              variant={isSystemActive ? "default" : "ghost"}
-              className={cn(
-                "w-full justify-start h-10",
-                isCollapsed ? "px-2" : "px-3",
-                isSystemActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              onClick={() => {
-                if (!isCollapsed) {
-                  setIsSystemExpanded(!isSystemExpanded);
-                }
-              }}
-            >
-              <HardDrive className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-              {!isCollapsed && (
-                <>
-                  <span className="flex-1 text-left">System</span>
-                  {isSystemExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                </>
-              )}
-            </Button>
-
-            {/* System Sub-items */}
-            {!isCollapsed && isSystemExpanded && (
-              <div className="ml-6 space-y-1">
-                {systemItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Button
-                      key={item.id}
-                      variant={currentPage === item.id ? "default" : "ghost"}
-                      className={cn(
-                        "w-full justify-start h-9 text-sm",
-                        "px-3",
-                        currentPage === item.id
-                          ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      )}
-                      onClick={() => handlePageChange(item.id)}
-                      onMouseEnter={() => prefetchComponent(item.id)}
-                    >
-                      <Icon className="h-3 w-3 mr-2" />
-                      <span>{item.label}</span>
-                    </Button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Desktop-only: Tools and Administration */}
-        {!device.isMobile && (
-          <>
-            {/* Tools - Navigation Item */}
-            <Button
-              variant={currentPage === 'tools' ? "default" : "ghost"}
-              className={cn(
-                "w-full justify-start h-10",
-                isCollapsed ? "px-2" : "px-3",
-                currentPage === 'tools'
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              onClick={() => handlePageChange('tools')}
-            >
-              <Wrench className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-              {!isCollapsed && <span>Tools</span>}
-            </Button>
-            <Button
-              variant={currentPage === 'administration' ? "default" : "ghost"}
-              className={cn(
-                "w-full justify-start h-10",
-                isCollapsed ? "px-2" : "px-3",
-                currentPage === 'administration'
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              onClick={() => handlePageChange('administration')}
-            >
-              <Settings className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-              {!isCollapsed && <span>Administration</span>}
-            </Button>
-            <Button
-              variant={currentPage === 'help' ? "default" : "ghost"}
-              className={cn(
-                "w-full justify-start h-10",
-                isCollapsed ? "px-2" : "px-3",
-                currentPage === 'help'
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              )}
-              onClick={() => handlePageChange('help')}
-            >
-              <HelpCircle className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-              {!isCollapsed && <span>Help</span>}
-            </Button>
           </>
         )}
+
+        {navigationScope === 'site-group' && (
+          <>
+            {/* Back to Organization */}
+            {!isCollapsed && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start h-10 px-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground mb-1"
+                onClick={() => exitSiteGroup()}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                <Globe className="h-3.5 w-3.5 mr-1.5" />
+                <span className="text-xs">Back to Organization</span>
+              </Button>
+            )}
+            {isCollapsed && (
+              <Button
+                variant="ghost"
+                className="w-full justify-center h-10 px-2 text-sidebar-foreground/70 hover:bg-sidebar-accent"
+                onClick={() => exitSiteGroup()}
+                title="Back to Organization"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            {/* Site group label */}
+            {!isCollapsed && siteGroup && (
+              <div className="px-3 py-1.5 mb-1">
+                <div className="text-[10px] text-sidebar-foreground/50 uppercase tracking-wider font-medium">Controller</div>
+                <div className="text-xs text-sidebar-foreground font-medium truncate">{siteGroup.name}</div>
+              </div>
+            )}
+
+            {/* Controller Management items */}
+            {filteredControllerItems.length > 0 && renderCollapsibleSection({
+              label: 'Controller Management',
+              icon: HardDrive,
+              items: filteredControllerItems,
+              isActive: isControllerActive,
+              isExpanded: true,
+              onToggle: () => {},
+            })}
+          </>
+        )}
+
       </nav>
 
       <Separator className="bg-sidebar-border" />
@@ -405,41 +430,6 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
           </div>
         )}
         
-        {/* Theme Toggle - Desktop only (mobile has it in user menu) */}
-        {onThemeToggle && !device.isMobile && (
-          <Button
-            variant="ghost"
-            onClick={onThemeToggle}
-            className={cn(
-              "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent",
-              isCollapsed ? "px-2" : "px-3"
-            )}
-            title={`Switch theme (current: ${theme})`}
-          >
-            {theme === 'ep1' ? (
-              <Moon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            ) : theme === 'dev' ? (
-              <Braces className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            ) : (
-              <Sun className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-            )}
-            {!isCollapsed && (
-              <span>{theme === 'ep1' ? 'Dark' : theme === 'dev' ? 'Dev' : 'Light'}</span>
-            )}
-          </Button>
-        )}
-        
-        <Button
-          variant="ghost"
-          onClick={onLogout}
-          className={cn(
-            "w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent",
-            isCollapsed ? "px-2" : "px-3"
-          )}
-        >
-          <LogOut className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-          {!isCollapsed && <span>Logout</span>}
-        </Button>
       </div>
     </div>
     </>

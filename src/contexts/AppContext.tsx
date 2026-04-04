@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Organization, SiteGroup, Site, Device } from '../types/domain';
+import type { NavigationScope } from '../config/navigationScopes';
+import type { GlobalElementType } from '../types/globalElements';
 import { tenantService } from '../services/tenantService';
 import { apiService } from '../services/api';
 
@@ -10,21 +12,40 @@ interface AppContextValue {
   site: Site | null;
   device: Device | null;
   isLoadingOrg: boolean;
+  navigationScope: NavigationScope;
+  /** Org-level site group filter — null means "all site groups". */
+  orgSiteGroupFilter: string | null;
+  setOrgSiteGroupFilter: (sgId: string | null) => void;
   setActiveSiteGroup: (siteGroup: SiteGroup | null) => void;
   setActiveSite: (site: Site | null) => void;
   setActiveDevice: (device: Device | null) => void;
   refreshSiteGroups: () => Promise<void>;
+  enterSiteGroup: (siteGroup: SiteGroup) => void;
+  exitSiteGroup: () => void;
+  /** Navigate to a page by its route key */
+  navigateToPage: (page: string) => void;
+  /** Navigate to Global Elements with template editor pre-opened for a given element type */
+  navigateToTemplateCreation: (elementType: GlobalElementType) => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
-export function AppContextProvider({ children }: { children: React.ReactNode }) {
+interface AppContextProviderProps {
+  children: React.ReactNode;
+  navigationScope: NavigationScope;
+  onNavigationScopeChange: (scope: NavigationScope) => void;
+  onPageChange?: (page: string) => void;
+  onTemplateCreation?: (elementType: GlobalElementType) => void;
+}
+
+export function AppContextProvider({ children, navigationScope, onNavigationScopeChange, onPageChange, onTemplateCreation }: AppContextProviderProps) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [siteGroups, setSiteGroups] = useState<SiteGroup[]>([]);
   const [activeSiteGroup, setActiveSiteGroupState] = useState<SiteGroup | null>(null);
   const [activeSite, setActiveSiteState] = useState<Site | null>(null);
   const [activeDevice, setActiveDeviceState] = useState<Device | null>(null);
   const [isLoadingOrg, setIsLoadingOrg] = useState(true);
+  const [orgSiteGroupFilter, setOrgSiteGroupFilter] = useState<string | null>(null);
 
   const loadOrgContext = useCallback(async () => {
     if (!apiService.isAuthenticated()) {
@@ -88,6 +109,30 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
     setSiteGroups(groups);
   }, []);
 
+  const enterSiteGroup = useCallback((sg: SiteGroup) => {
+    setActiveSiteGroupState(sg);
+    setActiveSiteState(null);
+    setActiveDeviceState(null);
+    if (sg) {
+      apiService.setBaseUrl(`${sg.controller_url}/management`);
+    }
+    onNavigationScopeChange('site-group');
+    onPageChange?.('system-backup');
+  }, [onNavigationScopeChange, onPageChange]);
+
+  const exitSiteGroup = useCallback(() => {
+    onNavigationScopeChange('global');
+    onPageChange?.('workspace');
+  }, [onNavigationScopeChange, onPageChange]);
+
+  const navigateToPage = useCallback((page: string) => {
+    onPageChange?.(page);
+  }, [onPageChange]);
+
+  const navigateToTemplateCreation = useCallback((elementType: GlobalElementType) => {
+    onTemplateCreation?.(elementType);
+  }, [onTemplateCreation]);
+
   return (
     <AppContext.Provider value={{
       organization,
@@ -96,10 +141,17 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       site: activeSite,
       device: activeDevice,
       isLoadingOrg,
+      navigationScope,
+      orgSiteGroupFilter,
+      setOrgSiteGroupFilter,
       setActiveSiteGroup,
       setActiveSite,
       setActiveDevice,
       refreshSiteGroups,
+      enterSiteGroup,
+      exitSiteGroup,
+      navigateToPage,
+      navigateToTemplateCreation,
     }}>
       {children}
     </AppContext.Provider>

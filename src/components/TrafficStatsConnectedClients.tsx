@@ -8,11 +8,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Checkbox } from './ui/checkbox';
-import { AlertCircle, Users, RefreshCw, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Settings2, Columns } from 'lucide-react';
+import { AlertCircle, Users, RefreshCw, Wifi, Activity, Timer, Signal, Download, Upload, Shield, Router, MapPin, User, Clock, Star, Trash2, UserX, RotateCcw, UserPlus, UserMinus, ShieldCheck, ShieldX, Info, Radio, WifiOff, SignalHigh, SignalMedium, SignalLow, SignalZero, Cable, Shuffle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Settings2, Columns, Building } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { Alert, AlertDescription } from './ui/alert';
 import { Skeleton } from './ui/skeleton';
-import { apiService, Station } from '../services/api';
+import { apiService, Station, Site } from '../services/api';
 import { trafficService } from '../services/traffic';
 import { identifyClient, lookupVendor, suggestDeviceType } from '../services/ouiLookup';
 import { isRandomizedMac, getMacAddressInfo } from '../services/macAddressUtils';
@@ -25,15 +25,20 @@ import { useCompoundSearch } from '../hooks/useCompoundSearch';
 import { useTableCustomization } from '../hooks/useTableCustomization';
 import { DetailSlideOut } from './DetailSlideOut';
 import { DEVICE_MONITORING_COLUMNS } from '../config/deviceMonitoringColumns';
+import { useAppContext } from '@/contexts/AppContext';
+import { Server } from 'lucide-react';
 
 interface ConnectedClientsProps {
   onShowDetail?: (macAddress: string, hostName?: string) => void;
 }
 
 export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsProps) {
+  const { navigationScope, siteGroups, orgSiteGroupFilter } = useAppContext();
   const [stations, setStations] = useState<Station[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [selectedSite, setSelectedSite] = useState<string>('all');
+  const [sites, setSites] = useState<Site[]>([]);
 
   const { query: searchQuery, setQuery: setSearchQuery, filterRows: filterBySearch, hasActiveSearch } = useCompoundSearch<Station>({
     storageKey: 'client-search',
@@ -111,9 +116,45 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     }
   };
 
+  const loadSites = async () => {
+    try {
+      let allSites: Site[] = [];
+      if (navigationScope === 'global' && siteGroups.length > 0) {
+        const originalBaseUrl = apiService.getBaseUrl();
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const sgSites = await apiService.getSites();
+            allSites.push(...(Array.isArray(sgSites) ? sgSites : []));
+          } catch (err) {
+            console.warn(`[ConnectedClients] Failed to fetch sites from ${sg.name}:`, err);
+          }
+        }
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        const sitesData = await apiService.getSites();
+        allSites = Array.isArray(sitesData) ? sitesData : [];
+      }
+      // Normalize name and deduplicate
+      const seen = new Set<string>();
+      const normalized = allSites
+        .map(s => ({ ...s, name: s.name || s.siteName || 'Unnamed Site' }))
+        .filter(s => {
+          if (seen.has(s.name)) return false;
+          seen.add(s.name);
+          return true;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setSites(normalized);
+    } catch (err) {
+      console.warn('[ConnectedClients] Failed to load sites:', err);
+    }
+  };
+
   useEffect(() => {
     loadStations();
-  }, []);
+    loadSites();
+  }, [navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadStations = async () => {
     // Check authentication before loading
@@ -127,9 +168,35 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     setError('');
 
     try {
-      // Use the new correlation method to get stations with proper site information
-      const stationsData = await apiService.getStationsWithSiteCorrelation();
-      const stationsArray = Array.isArray(stationsData) ? stationsData : [];
+      let stationsArray: Station[] = [];
+
+      if (navigationScope === 'global' && siteGroups.length > 0) {
+        // Org scope: fetch from all controllers, tag with site group info
+        const originalBaseUrl = apiService.getBaseUrl();
+
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const sgStations = await apiService.getStationsWithSiteCorrelation();
+            const tagged = (Array.isArray(sgStations) ? sgStations : []).map(s => ({
+              ...s,
+              _siteGroupId: sg.id,
+              _siteGroupName: sg.name,
+            }));
+            stationsArray.push(...tagged);
+          } catch (err) {
+            console.warn(`[ConnectedClients] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+
+        // Restore original base URL
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        // Site-group scope: single controller fetch
+        const stationsData = await apiService.getStationsWithSiteCorrelation();
+        stationsArray = Array.isArray(stationsData) ? stationsData : [];
+      }
+
       setStations(stationsArray);
       setTotalItems(stationsArray.length);
 
@@ -337,8 +404,16 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
     }
   };
 
-  // Filter stations by site, compound search, and time range
-  const filteredStations = filterBySearch(stations);
+  // Filter stations by site group (org scope), site, compound search, and time range
+  const siteGroupFiltered = orgSiteGroupFilter
+    ? stations.filter((s: any) => s._siteGroupId === orgSiteGroupFilter)
+    : stations;
+  const siteFiltered = selectedSite !== 'all'
+    ? siteGroupFiltered.filter(s => s.siteName === selectedSite)
+    : siteGroupFiltered;
+  // Use site-filtered stations for all stat calculations
+  const effectiveStations = siteFiltered;
+  const filteredStations = filterBySearch(siteFiltered);
 
   // Sort filtered stations
   const sortedStations = [...filteredStations].sort((a, b) => {
@@ -403,39 +478,38 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   }, [searchQuery]);
 
   const getUniqueStatuses = () => {
-    const statuses = new Set(stations.map(station => station.status).filter(Boolean));
+    const statuses = new Set(effectiveStations.map(station => station.status).filter(Boolean));
     return Array.from(statuses);
   };
 
   const getUniqueAPs = () => {
-    const aps = new Set(stations.map(station => station.apName || station.apSerial).filter(Boolean));
+    const aps = new Set(effectiveStations.map(station => station.apName || station.apSerial).filter(Boolean));
     return Array.from(aps);
   };
 
   const getUniqueSites = () => {
-    const sites = new Set(stations.map(station => station.siteName).filter(Boolean));
+    const sites = new Set(effectiveStations.map(station => station.siteName).filter(Boolean));
     return Array.from(sites);
   };
 
   const getUniqueDeviceTypes = () => {
-    const deviceTypes = new Set(stations.map(station => station.deviceType).filter(Boolean));
+    const deviceTypes = new Set(effectiveStations.map(station => station.deviceType).filter(Boolean));
     return Array.from(deviceTypes);
   };
 
   const getUniqueNetworks = () => {
-    const networks = new Set(stations.map(station => station.network).filter(Boolean));
+    const networks = new Set(effectiveStations.map(station => station.network).filter(Boolean));
     return Array.from(networks);
   };
 
   const getTotalTraffic = () => {
-    return stations.reduce((total, station) => {
+    return effectiveStations.reduce((total, station) => {
       const trafficData = stationTrafficData.get(station.macAddress);
       if (trafficData) {
         const inBytes = trafficData.inBytes || 0;
         const outBytes = trafficData.outBytes || 0;
         return total + inBytes + outBytes;
       }
-      // Fallback to station data if traffic data not available
       const rx = station.rxBytes || station.clientBandwidthBytes || 0;
       const tx = station.txBytes || station.outBytes || 0;
       return total + rx + tx;
@@ -443,15 +517,15 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   };
 
   const getActiveClientsCount = () => {
-    return stations.filter(station => 
-      station.status?.toLowerCase() === 'connected' || 
+    return effectiveStations.filter(station =>
+      station.status?.toLowerCase() === 'connected' ||
       station.status?.toLowerCase() === 'associated' ||
       station.status?.toLowerCase() === 'active'
     ).length;
   };
 
   const getDisconnectedClientsCount = () => {
-    return stations.filter(station => 
+    return effectiveStations.filter(station =>
       station.status?.toLowerCase() === 'disconnected' ||
       station.status?.toLowerCase() === 'inactive'
     ).length;
@@ -466,11 +540,11 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
   };
 
   const getRandomizedMacCount = () => {
-    return stations.filter(station => isRandomizedMac(station.macAddress)).length;
+    return effectiveStations.filter(station => isRandomizedMac(station.macAddress)).length;
   };
 
   const getPermanentMacCount = () => {
-    return stations.filter(station => !isRandomizedMac(station.macAddress)).length;
+    return effectiveStations.filter(station => !isRandomizedMac(station.macAddress)).length;
   };
 
   const handleStationSelect = (macAddress: string, checked: boolean) => {
@@ -641,6 +715,20 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
           </p>
         </div>
         <div className="flex items-center space-x-2">
+          <Select value={selectedSite} onValueChange={setSelectedSite}>
+            <SelectTrigger className="w-[145px] h-8 text-xs">
+              <Building className="h-3.5 w-3.5 mr-1.5" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sites</SelectItem>
+              {sites.map(site => (
+                <SelectItem key={site.id || site.name} value={site.name}>
+                  {site.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button onClick={loadStations} variant="outline" size="sm" disabled={isLoading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh Clients
@@ -665,6 +753,9 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
           <ExportButton
             data={sortedStations}
             columns={[
+              ...(navigationScope === 'global' && siteGroups.length > 1
+                ? [{ key: '_siteGroupName', label: 'Site Group' }]
+                : []),
               { key: 'hostName', label: 'Hostname' },
               { key: 'macAddress', label: 'MAC Address' },
               { key: 'ipAddress', label: 'IP Address' },
@@ -693,92 +784,82 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
         <Alert>
           <Shuffle className="h-4 w-4" />
           <AlertDescription>
-            <strong>{getRandomizedMacCount()} of {stations.length} clients</strong> are using randomized MAC addresses for privacy. 
+            <strong>{getRandomizedMacCount()} of {effectiveStations.length} clients</strong> are using randomized MAC addresses for privacy. 
             These addresses change periodically to prevent device tracking across networks.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl group-hover:bg-violet-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Total Clients</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-violet shadow-md group-hover:scale-110 transition-transform">
               <Users className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">{stations.length}</div>
+            <div className="text-2xl font-bold text-foreground">{effectiveStations.length}</div>
             <p className="text-xs text-muted-foreground">
               Connected devices
             </p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Active Connections</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-green shadow-md group-hover:scale-110 transition-transform">
               <Wifi className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">{getActiveClientsCount()}</div>
+            <div className="text-2xl font-bold text-foreground">{getActiveClientsCount()}</div>
             <p className="text-xs text-muted-foreground">
               Currently active
             </p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-pink-500 to-rose-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-pink-500/10 rounded-full blur-2xl group-hover:bg-pink-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Randomized MACs</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-pink-500 to-rose-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-pink shadow-md group-hover:scale-110 transition-transform">
               <Shuffle className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent">{getRandomizedMacCount()}</div>
+            <div className="text-2xl font-bold text-foreground">{getRandomizedMacCount()}</div>
             <p className="text-xs text-muted-foreground">
               Privacy-enabled devices
             </p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-red-500 to-rose-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-red-500/10 rounded-full blur-2xl group-hover:bg-red-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Disconnected</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-red-500 to-rose-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-red shadow-md group-hover:scale-110 transition-transform">
               <WifiOff className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-red-600 to-rose-600 bg-clip-text text-transparent">{getDisconnectedClientsCount()}</div>
+            <div className="text-2xl font-bold text-foreground">{getDisconnectedClientsCount()}</div>
             <p className="text-xs text-muted-foreground">
               Recently offline
             </p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Total Traffic</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-blue shadow-md group-hover:scale-110 transition-transform">
               <Activity className="h-3.5 w-3.5 text-white animate-pulse" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{formatBytes(getTotalTraffic())}</div>
+            <div className="text-2xl font-bold text-foreground">{formatBytes(getTotalTraffic())}</div>
             <p className="text-xs text-muted-foreground">
               Data transferred {isLoadingTraffic && "(loading...)"}
             </p>
@@ -883,7 +964,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
         </DialogContent>
       </Dialog>
 
-      <Card className="surface-2dp">
+      <Card>
         <CardHeader className="pb-3 pt-4">
           <SearchFilterBar
             searchPlaceholder="Search by hostname, MAC, IP, AP, site, SSID, device type..."
@@ -891,7 +972,7 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
             onSearchChange={setSearchQuery}
             showTimeRange={false}
             resultCount={filteredStations.length}
-            totalCount={stations.length}
+            totalCount={effectiveStations.length}
           />
         </CardHeader>
         <CardContent>
@@ -915,9 +996,18 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                       <Checkbox
                         checked={selectedStations.size === paginatedStations.length && paginatedStations.length > 0}
                         onCheckedChange={handleSelectAll}
-                        className="h-3 w-3 border-muted-foreground/50"
+                        className="h-3.5 w-3.5"
                       />
                     </TableHead>
+                    {/* Site Group column — only at org scope */}
+                    {navigationScope === 'global' && siteGroups.length > 1 && (
+                      <TableHead className="p-2 text-[10px]">
+                        <div className="flex items-center gap-1">
+                          <Server className="h-3 w-3" />
+                          <span>Site Group</span>
+                        </div>
+                      </TableHead>
+                    )}
                     {/* Dynamic columns from customization */}
                     {columnCustomization.visibleColumnConfigs.map((column) => (
                       <TableHead
@@ -1009,10 +1099,18 @@ export function TrafficStatsConnectedClients({ onShowDetail }: ConnectedClientsP
                           <Checkbox
                             checked={selectedStations.has(station.macAddress)}
                             onCheckedChange={(checked) => handleStationSelect(station.macAddress, checked as boolean)}
-                            className="h-3 w-3 border-muted-foreground/50"
+                            className="h-3.5 w-3.5"
                             onClick={(e) => e.stopPropagation()}
                           />
                         </TableCell>
+                        {/* Site Group cell — only at org scope */}
+                        {navigationScope === 'global' && siteGroups.length > 1 && (
+                          <TableCell className="p-1">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                              {(station as any)._siteGroupName || '—'}
+                            </Badge>
+                          </TableCell>
+                        )}
                         {/* Dynamic cells from visible columns */}
                         {columnCustomization.visibleColumnConfigs.map((column) => (
                           <TableCell key={column.key} className="p-1">

@@ -4371,71 +4371,6 @@ html {
   font-family: var(--font-family-sans);
 }
 
-.surface-0dp {
-  background-color: var(--background);
-  box-shadow: none;
-}
-
-.surface-1dp {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 2px 1px -1px #0003, 0 1px 1px #00000024, 0 1px 3px #0000001f;
-}
-
-.surface-1dp:before {
-  content: "";
-  background-color: var(--surface-1dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.surface-2dp {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 3px 1px -2px #0003, 0 2px 2px #00000024, 0 1px 5px #0000001f;
-}
-
-.surface-2dp:before {
-  content: "";
-  background-color: var(--surface-2dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.surface-4dp {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 2px 4px -1px #0003, 0 4px 5px #00000024, 0 1px 10px #0000001f;
-}
-
-.surface-4dp:before {
-  content: "";
-  background-color: var(--surface-4dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.surface-8dp {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 5px 5px -3px #0003, 0 8px 10px 1px #00000024, 0 3px 14px 2px #0000001f;
-}
-
-.surface-8dp:before {
-  content: "";
-  background-color: var(--surface-8dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
 .status-healthy {
   color: var(--success);
 }
@@ -4463,49 +4398,6 @@ html {
   color: var(--destructive-foreground);
 }
 
-.card-elevated {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a;
-}
-
-.card-elevated:before {
-  content: "";
-  background-color: var(--surface-2dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.card-floating {
-  background-color: var(--background);
-  position: relative;
-  box-shadow: 0 20px 25px -5px #0000001a, 0 8px 10px -6px #0000001a;
-}
-
-.card-floating:before {
-  content: "";
-  background-color: var(--surface-8dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.navigation-elevated {
-  background-color: var(--background);
-  position: relative;
-}
-
-.navigation-elevated:before {
-  content: "";
-  background-color: var(--surface-4dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
 
 .interactive-surface {
   transition: all .2s cubic-bezier(.4, 0, .2, 1);
@@ -4568,6 +4460,39 @@ html {
 
 .material-gradient-secondary {
   background: linear-gradient(135deg, #03dac5 0%, #018786 100%);
+}
+
+/* ── Checkbox Visibility ──────────────────────────────────────────────── */
+/* Dark themes (ep1, dev, default dark) — bright white border for unchecked */
+.aura-checkbox[data-state="unchecked"] {
+  border-color: #ffffffcc !important;
+  background: #ffffff1a !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+.aura-checkbox[data-state="unchecked"]:hover {
+  border-color: var(--primary, #bb86fc) !important;
+  background: color-mix(in srgb, var(--primary, #bb86fc) 15%, transparent) !important;
+  box-shadow: none;
+}
+.aura-checkbox[data-state="checked"] {
+  border-color: var(--primary, #bb86fc) !important;
+  background: var(--primary, #bb86fc) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary, #bb86fc) 30%, transparent);
+}
+/* Light theme — dark border for unchecked */
+.theme-light .aura-checkbox[data-state="unchecked"],
+html.light .aura-checkbox[data-state="unchecked"],
+html[data-theme="light"] .aura-checkbox[data-state="unchecked"] {
+  border-color: #00000066 !important;
+  background: #0000000a !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.theme-light .aura-checkbox[data-state="unchecked"]:hover,
+html.light .aura-checkbox[data-state="unchecked"]:hover,
+html[data-theme="light"] .aura-checkbox[data-state="unchecked"]:hover {
+  border-color: var(--primary, #6200ee) !important;
+  background: color-mix(in srgb, var(--primary, #6200ee) 10%, transparent) !important;
+  box-shadow: none;
 }
 
 @media (prefers-contrast: high) {
@@ -4787,47 +4712,6 @@ html[data-theme="light"], html.light {
   color: var(--foreground);
 }
 
-.material-surface-container-low {
-  background-color: var(--background);
-  position: relative;
-}
-
-.material-surface-container-low:before {
-  content: "";
-  background-color: var(--surface-1dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.material-surface-container-high {
-  background-color: var(--background);
-  position: relative;
-}
-
-.material-surface-container-high:before {
-  content: "";
-  background-color: var(--surface-2dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
-
-.material-surface-container-highest {
-  background-color: var(--background);
-  position: relative;
-}
-
-.material-surface-container-highest:before {
-  content: "";
-  background-color: var(--surface-4dp);
-  border-radius: inherit;
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-}
 
 @property --tw-translate-x {
   syntax: "*";
@@ -6512,3 +6396,17 @@ body.mi5 {
 .kroger a:active {
   color: #052D66 !important;
 }
+
+/* ========================================
+   Stat Card Badge Gradients
+   Tailwind v4 gradient utilities (from-*, to-*) are not in the compiled CSS.
+   These provide the colored icon badge backgrounds for stat cards.
+   ======================================== */
+.badge-gradient-blue { background: linear-gradient(to bottom right, #3b82f6, #06b6d4); }
+.badge-gradient-green { background: linear-gradient(to bottom right, #10b981, #22c55e); }
+.badge-gradient-violet { background: linear-gradient(to bottom right, #8b5cf6, #a855f7); }
+.badge-gradient-amber { background: linear-gradient(to bottom right, #f59e0b, #f97316); }
+.badge-gradient-indigo { background: linear-gradient(to bottom right, #6366f1, #8b5cf6); }
+.badge-gradient-red { background: linear-gradient(to bottom right, #ef4444, #f43f5e); }
+.badge-gradient-pink { background: linear-gradient(to bottom right, #ec4899, #f43f5e); }
+.badge-gradient-indigo-purple { background: linear-gradient(to bottom right, #6366f1, #a855f7); }

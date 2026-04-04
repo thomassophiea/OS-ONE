@@ -180,7 +180,7 @@ export function LicenseDashboard() {
     <div className="space-y-6 p-4 md:p-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3 text-foreground">
             <Key className="h-6 w-6 md:h-8 md:w-8 text-primary" />
             License Management
           </h2>
@@ -211,6 +211,12 @@ export function LicenseDashboard() {
         </div>
       </div>
 
+      {/* Platform Manager dependency notice */}
+      <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-300">
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+        <span>License features require Platform Manager API access. These endpoints (/platformmanager/v1/license/*) are not part of the standard Swagger specification and may not be available on all controller versions.</span>
+      </div>
+
       {/* License Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-2 hover:shadow-lg transition-all duration-300 hover:border-primary/50">
@@ -224,7 +230,7 @@ export function LicenseDashboard() {
               <div className="p-2.5 bg-primary/10 rounded-xl">
                 <Shield className="h-6 w-6 text-primary" />
               </div>
-              <span className="text-3xl font-bold bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent">
+              <span className="text-3xl font-bold text-foreground">
                 {licenseInfo?.totalLicenses || 0}
               </span>
             </div>
@@ -331,7 +337,7 @@ export function LicenseDashboard() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-muted hover:border-muted-foreground/30 transition-all shadow-sm hover:shadow-md">
-                  <div className="text-3xl font-bold bg-gradient-to-br from-gray-700 to-gray-600 bg-clip-text text-transparent">{licenseUsage.totalDevices}</div>
+                  <div className="text-3xl font-bold text-foreground">{licenseUsage.totalDevices}</div>
                   <div className="text-sm font-medium text-muted-foreground mt-1">Total Devices</div>
                 </div>
                 <div className="text-center p-5 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border-2 border-[color:var(--status-success)]/30 hover:border-[color:var(--status-success)]/50 transition-all shadow-sm hover:shadow-md">

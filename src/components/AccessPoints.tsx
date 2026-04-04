@@ -23,6 +23,8 @@ import { SaveToWorkspace } from './SaveToWorkspace';
 import { useTableCustomization } from '@/hooks/useTableCustomization';
 import { ColumnCustomizationDialog } from './ui/ColumnCustomizationDialog';
 import { AP_TABLE_COLUMNS } from '@/config/apTableColumns';
+import { useAppContext } from '@/contexts/AppContext';
+import { Server, Building } from 'lucide-react';
 
 // Cable health detection utilities
 interface CableHealthResult {
@@ -406,11 +408,28 @@ function getWifiGeneration(model?: string): WifiGen {
   return 'Unknown';
 }
 
+// Helper function to get site/location name for an AP (pure — no component state)
+function getAPSite(ap: AccessPoint): string {
+  const locationFields = [
+    'hostSite', 'location', 'locationName', 'apLocation', 'ap_location',
+    'site', 'siteName', 'site_name', 'campus', 'building',
+    'siteId', 'site_id', 'place', 'area', 'zone'
+  ];
+  for (const field of locationFields) {
+    const value = (ap as any)[field];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
 interface AccessPointsProps {
   onShowDetail?: (serialNumber: string, displayName?: string) => void;
 }
 
 export function AccessPoints({ onShowDetail }: AccessPointsProps) {
+  const { navigationScope, siteGroups, orgSiteGroupFilter } = useAppContext();
   const [accessPoints, setAccessPoints] = useState<AccessPoint[]>([]);
   const [clientCounts, setClientCounts] = useState<Record<string, number>>({});
   const [apMetrics, setApMetrics] = useState<Record<string, { cpuUsage?: number; memoryUsage?: number }>>({});
@@ -421,6 +440,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
   const [isLoadingMeshRoles, setIsLoadingMeshRoles] = useState(false);
   const [apStates, setApStates] = useState<Record<string, string>>({});
   const [error, setError] = useState<string>('');
+  const [selectedSite, setSelectedSite] = useState<string>('all');
 
   // Compound tokenized AND search (replaces old single-term search + site filter)
   const { query: searchQuery, setQuery: setSearchQuery, filterRows: filterBySearch, hasActiveSearch } = useCompoundSearch<AccessPoint>({
@@ -495,7 +515,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
   useEffect(() => {
     // Load all access points on mount (compound search handles filtering client-side)
     loadAccessPoints();
-  }, []);
+  }, [navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh polling
   useEffect(() => {
@@ -567,10 +587,34 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
     setError('');
 
     try {
-      // Always fetch all APs — compound search handles filtering client-side
-      const apsData = await apiService.getAccessPoints();
+      let accessPointsArray: AccessPoint[] = [];
 
-      const accessPointsArray = Array.isArray(apsData) ? apsData : [];
+      if (navigationScope === 'global' && siteGroups.length > 0) {
+        // Org scope: fetch from all controllers, tag with site group info
+        const originalBaseUrl = apiService.getBaseUrl();
+
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const apsData = await apiService.getAccessPoints();
+            const tagged = (Array.isArray(apsData) ? apsData : []).map(ap => ({
+              ...ap,
+              _siteGroupId: sg.id,
+              _siteGroupName: sg.name,
+            }));
+            accessPointsArray.push(...tagged);
+          } catch (err) {
+            console.warn(`[AccessPoints] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+
+        // Restore original base URL
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        // Site-group scope: single controller fetch
+        const apsData = await apiService.getAccessPoints();
+        accessPointsArray = Array.isArray(apsData) ? apsData : [];
+      }
 
       // Map sysUptime to uptime field and format it
       const enrichedAPs = accessPointsArray.map(ap => ({
@@ -599,7 +643,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
       if (!errorMessage.includes('timeout') && !errorMessage.includes('timed out')) {
         setError(errorMessage);
       } else {
-        // For timeout errors, show a user-friendly message
         setError('Loading access points is taking longer than expected. The controller may be slow to respond.');
       }
     } finally {
@@ -839,7 +882,24 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
     }
   };
 
-  const filteredAccessPoints = filterBySearch(accessPoints);
+  // Derive unique site names from loaded APs
+  const availableSites = useMemo(() => {
+    const siteSet = new Set<string>();
+    accessPoints.forEach(ap => {
+      const site = getAPSite(ap);
+      if (site) siteSet.add(site);
+    });
+    return Array.from(siteSet).sort();
+  }, [accessPoints]);
+
+  // Apply org-level site group filter, then site filter, then search
+  const siteGroupFilteredAPs = orgSiteGroupFilter
+    ? accessPoints.filter((ap: any) => ap._siteGroupId === orgSiteGroupFilter)
+    : accessPoints;
+  const siteFilteredAPs = selectedSite !== 'all'
+    ? siteGroupFilteredAPs.filter(ap => getAPSite(ap) === selectedSite)
+    : siteGroupFilteredAPs;
+  const filteredAccessPoints = filterBySearch(siteFilteredAPs);
 
   // Check if AP is an AFC anchor (6 GHz Standard Power)
   const isAfcAnchor = (ap: AccessPoint): boolean => {
@@ -1005,31 +1065,6 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
     
     // Fallback to serial number if no name fields are available
     return ap.serialNumber || '';
-  };
-
-  // Helper function to get site/location name for an AP
-  const getAPSite = (ap: AccessPoint) => {
-    // Define all possible location/site-related field names to check
-    // Prioritize hostSite first as it contains the actual location like "LAB Remote Site"
-    const locationFields = [
-      'hostSite', 'location', 'locationName', 'apLocation', 'ap_location',
-      'site', 'siteName', 'site_name', 'campus', 'building',
-      'siteId', 'site_id', 'place', 'area', 'zone'
-    ];
-    
-    // First try to find the actual location/site information from the AP data
-    for (const field of locationFields) {
-      const value = ap[field];
-      if (typeof value === 'string' && value.trim().length > 0) {
-        const trimmedValue = value.trim();
-        
-        // Return the actual location/site value directly from the AP
-        // This will show values like "LAB Remote Site" exactly as they appear in the AP data
-        return trimmedValue;
-      }
-    }
-    
-    return '';
   };
 
   // Helper function to determine if AP is online
@@ -1704,6 +1739,20 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           )}
         </div>
         <div className="flex items-center space-x-2">
+          <Select value={selectedSite} onValueChange={setSelectedSite}>
+            <SelectTrigger className="w-[145px] h-8 text-xs">
+              <Building className="h-3.5 w-3.5 mr-1.5" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sites</SelectItem>
+              {availableSites.map(site => (
+                <SelectItem key={site} value={site}>
+                  {site}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Button onClick={() => {
             // Refresh columns metadata and access points
             loadData();
@@ -1813,17 +1862,15 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
 
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Total Access Points</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-blue shadow-md group-hover:scale-110 transition-transform">
               <Wifi className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">{accessPoints.length}</div>
+            <div className="text-2xl font-bold text-foreground">{accessPoints.length}</div>
             <p className="text-xs text-muted-foreground mb-2">Managed devices</p>
             <div className="space-y-0.5">
               {(['Wi-Fi 7', 'Wi-Fi 6E', 'Wi-Fi 6', 'Wi-Fi 5'] as const).map(gen => wifiGenCounts[gen] > 0 && (
@@ -1836,12 +1883,10 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">AP Status</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-green shadow-md group-hover:scale-110 transition-transform">
               <Activity className="h-3.5 w-3.5 text-white animate-pulse" />
             </div>
           </CardHeader>
@@ -1853,7 +1898,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                   <span className="text-sm font-medium">Online</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                  <span className="text-xl font-bold text-foreground">
                     {accessPoints.filter(ap => isAPOnline(ap)).length}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -1883,18 +1928,16 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-violet-500/10 rounded-full blur-2xl group-hover:bg-violet-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Total Clients</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-violet shadow-md group-hover:scale-110 transition-transform">
               <Users className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
             <div className="flex items-center space-x-2">
-              <div className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">{getTotalClientCount()}</div>
+              <div className="text-2xl font-bold text-foreground">{getTotalClientCount()}</div>
               {isLoadingClients && (
                 <div className="animate-pulse">
                   <Activity className="h-4 w-4 text-muted-foreground" />
@@ -1907,17 +1950,15 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
-          <div className="absolute -right-8 -top-8 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all" />
+        <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative">
             <CardTitle className="text-sm font-semibold">Hardware Types</CardTitle>
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md group-hover:scale-110 transition-transform">
+            <div className="p-1.5 rounded-lg badge-gradient-amber shadow-md group-hover:scale-110 transition-transform">
               <Wifi className="h-3.5 w-3.5 text-white" />
             </div>
           </CardHeader>
           <CardContent className="relative">
-            <div className="text-2xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">{getUniqueHardwareTypes().length}</div>
+            <div className="text-2xl font-bold text-foreground">{getUniqueHardwareTypes().length}</div>
             <p className="text-xs text-muted-foreground">
               Different models
             </p>
@@ -1985,7 +2026,7 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
         </CardContent>
       </Card>
 
-      <Card className="surface-2dp">
+      <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between mb-2">
             <CardTitle className="text-headline-6 text-high-emphasis">Access Points</CardTitle>
@@ -2023,6 +2064,14 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {navigationScope === 'global' && siteGroups.length > 1 && (
+                      <TableHead className="text-[10px]">
+                        <div className="flex items-center gap-1">
+                          <Server className="h-3 w-3" />
+                          <span>Site Group</span>
+                        </div>
+                      </TableHead>
+                    )}
                     {visibleColumns.map(columnKey => {
                       const column = AP_TABLE_COLUMNS.find(c => c.key === columnKey);
                       return (
@@ -2051,6 +2100,13 @@ export function AccessPoints({ onShowDetail }: AccessPointsProps) {
                         }
                       }}
                     >
+                      {navigationScope === 'global' && siteGroups.length > 1 && (
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
+                            {(ap as any)._siteGroupName || '—'}
+                          </Badge>
+                        </TableCell>
+                      )}
                       {visibleColumns.map(columnKey => (
                         <TableCell key={columnKey}>
                           {renderColumnContent(columnKey, ap)}

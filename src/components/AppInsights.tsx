@@ -7,13 +7,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
+// Button imported by PageHeader internally
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Skeleton } from './ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   AppWindow,
-  RefreshCw,
   TrendingUp,
   TrendingDown,
   Users,
@@ -54,8 +53,10 @@ import {
   ChevronUp,
   ChevronDown
 } from 'lucide-react';
-import { Site } from '../services/api';
+import { Site, apiService } from '../services/api';
+import { PageHeader } from './PageHeader';
 import { SaveToWorkspace } from './SaveToWorkspace';
+import { useAppContext } from '@/contexts/AppContext';
 import {
   PieChart as RechartsPieChart,
   Pie,
@@ -193,6 +194,7 @@ interface AppInsightsProps {
 }
 
 export function AppInsights({ api }: AppInsightsProps) {
+  const { navigationScope, siteGroups } = useAppContext();
   const [data, setData] = useState<AppInsightsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -202,17 +204,70 @@ export function AppInsights({ api }: AppInsightsProps) {
   const [selectedSite, setSelectedSite] = useState<string>('all');
   const [isLoadingSites, setIsLoadingSites] = useState(false);
 
-  // Load sites
+  // Load sites from all controllers at org scope
   const loadSites = async () => {
     setIsLoadingSites(true);
     try {
-      const sitesData = await api.getSites();
-      setSites(Array.isArray(sitesData) ? sitesData : []);
+      let allSites: Site[] = [];
+      if (navigationScope === 'global' && siteGroups.length > 0) {
+        const originalBaseUrl = apiService.getBaseUrl();
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const sgSites = await apiService.getSites();
+            allSites.push(...(Array.isArray(sgSites) ? sgSites : []));
+          } catch (err) {
+            console.warn(`[AppInsights] Failed to fetch sites from ${sg.name}:`, err);
+          }
+        }
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        const sitesData = await api.getSites();
+        allSites = Array.isArray(sitesData) ? sitesData : [];
+      }
+      // Normalize name and deduplicate by id
+      const seen = new Set<string>();
+      const normalized = allSites
+        .map(s => ({ ...s, name: s.name || s.siteName || 'Unnamed Site' }))
+        .filter(s => {
+          const key = s.id || s.name;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setSites(normalized);
     } catch (err) {
       setSites([]);
     } finally {
       setIsLoadingSites(false);
     }
+  };
+
+  // Merge two AppInsightsData by summing distributionStats values per id
+  const mergeInsights = (a: AppInsightsData, b: AppInsightsData): AppInsightsData => {
+    const mergeReports = (ra: AppGroupReport[], rb: AppGroupReport[]): AppGroupReport[] => {
+      if (!ra?.length) return rb || [];
+      if (!rb?.length) return ra;
+      const base = { ...ra[0] };
+      const map = new Map<string, AppGroupStat>();
+      for (const s of base.distributionStats) map.set(s.id, { ...s });
+      for (const s of (rb[0]?.distributionStats || [])) {
+        const existing = map.get(s.id);
+        if (existing) existing.value += s.value;
+        else map.set(s.id, { ...s });
+      }
+      base.distributionStats = Array.from(map.values()).sort((x, y) => y.value - x.value);
+      return [base];
+    };
+    return {
+      topAppGroupsByUsage: mergeReports(a.topAppGroupsByUsage, b.topAppGroupsByUsage),
+      topAppGroupsByClientCountReport: mergeReports(a.topAppGroupsByClientCountReport, b.topAppGroupsByClientCountReport),
+      topAppGroupsByThroughputReport: mergeReports(a.topAppGroupsByThroughputReport, b.topAppGroupsByThroughputReport),
+      worstAppGroupsByUsage: mergeReports(a.worstAppGroupsByUsage, b.worstAppGroupsByUsage),
+      worstAppGroupsByClientCountReport: mergeReports(a.worstAppGroupsByClientCountReport, b.worstAppGroupsByClientCountReport),
+      worstAppGroupsByThroughputReport: mergeReports(a.worstAppGroupsByThroughputReport, b.worstAppGroupsByThroughputReport),
+    };
   };
 
   // Fetch data
@@ -221,17 +276,37 @@ export function AppInsights({ api }: AppInsightsProps) {
     setError(null);
     try {
       const siteId = selectedSite !== 'all' ? selectedSite : undefined;
-      const response = await api.getAppInsights(duration, siteId);
-      setData(response);
+      const isOrgScope = navigationScope === 'global' && siteGroups.length > 0;
+
+      if (isOrgScope) {
+        const originalBaseUrl = apiService.getBaseUrl();
+        let merged: AppInsightsData | null = null;
+
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const response = await api.getAppInsights(duration, siteId);
+            merged = merged ? mergeInsights(merged, response) : response;
+          } catch (err) {
+            console.warn(`[AppInsights] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+        if (merged) setData(merged);
+      } else {
+        const response = await api.getAppInsights(duration, siteId);
+        setData(response);
+      }
       setLastRefresh(new Date());
     } catch (err) {
       setError('Failed to load application insights data');
     } finally {
       setLoading(false);
     }
-  }, [api, duration, selectedSite]);
+  }, [api, duration, selectedSite, navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadSites(); }, []);
+  useEffect(() => { loadSites(); }, [navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Prepare chart data
@@ -457,69 +532,48 @@ export function AppInsights({ api }: AppInsightsProps) {
   return (
     <div className="p-4 space-y-3">
       {/* Header */}
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20 overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl" />
-        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-primary/8 rounded-full blur-3xl" />
+      <PageHeader
+        title="App Insights"
+        subtitle={`Application visibility and traffic analytics${selectedSite !== 'all' ? ` • ${sites.find(s => s.id === selectedSite)?.name || selectedSite}` : ''}`}
+        icon={AppWindow}
+        onRefresh={fetchData}
+        refreshing={loading}
+        actions={
+          <>
+            <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <SelectTrigger className="w-[145px] h-8 text-xs">
+                <Building className="h-3.5 w-3.5 mr-1.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {sites.map(site => (
+                  <SelectItem key={site.id} value={site.id}>
+                    {site.name || site.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <div className="flex items-center gap-2.5 relative z-10">
-          <div className="p-2 rounded-lg bg-primary shadow-sm">
-            <AppWindow className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              App Insights
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Application visibility and traffic analytics
-              {selectedSite !== 'all' && (
-                <span className="ml-1 text-primary font-medium">
-                  • {sites.find(s => s.id === selectedSite)?.name || selectedSite}
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Select value={selectedSite} onValueChange={setSelectedSite}>
-            <SelectTrigger className="w-[145px] h-8 text-xs">
-              <Building className="h-3.5 w-3.5 mr-1.5" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sites</SelectItem>
-              {sites.map(site => (
-                <SelectItem key={site.id} value={site.id}>
-                  {site.name || site.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={duration} onValueChange={setDuration}>
-            <SelectTrigger className="w-[120px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1D">Last 24 Hours</SelectItem>
-              <SelectItem value="7D">Last 7 Days</SelectItem>
-              <SelectItem value="14D">Last 14 Days</SelectItem>
-              <SelectItem value="30D">Last 30 Days</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="h-8 px-3 text-xs">
-            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+            <Select value={duration} onValueChange={setDuration}>
+              <SelectTrigger className="w-[120px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1D">Last 24 Hours</SelectItem>
+                <SelectItem value="7D">Last 7 Days</SelectItem>
+                <SelectItem value="14D">Last 14 Days</SelectItem>
+                <SelectItem value="30D">Last 30 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </>
+        }
+      />
 
       {/* Summary Cards */}
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-cyan-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
+          <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
             <div className="absolute -right-6 -top-6 w-20 h-20 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
@@ -531,15 +585,14 @@ export function AppInsights({ api }: AppInsightsProps) {
                   <p className="text-lg font-bold" style={{ color: 'var(--chart-2)' }}>{formatBytes(stats.totalUsage)}</p>
                   <p className="text-[10px] text-muted-foreground">{stats.totalCategories} categories</p>
                 </div>
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md group-hover:scale-110 transition-transform">
+                <div className="p-1.5 rounded-lg badge-gradient-blue shadow-md group-hover:scale-110 transition-transform">
                   <HardDrive className="h-3.5 w-3.5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-green-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
+          <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
             <div className="absolute -right-6 -top-6 w-20 h-20 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
@@ -551,15 +604,14 @@ export function AppInsights({ api }: AppInsightsProps) {
                   <p className="text-lg font-bold" style={{ color: 'var(--chart-5)' }}>{formatThroughput(stats.totalThroughput)}</p>
                   <p className="text-[10px] text-muted-foreground">Avg bandwidth</p>
                 </div>
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-green-500 shadow-md group-hover:scale-110 transition-transform">
+                <div className="p-1.5 rounded-lg badge-gradient-green shadow-md group-hover:scale-110 transition-transform">
                   <Gauge className="h-3.5 w-3.5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 to-purple-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
+          <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
             <div className="absolute -right-6 -top-6 w-20 h-20 bg-violet-500/10 rounded-full blur-2xl group-hover:bg-violet-500/20 transition-all" />
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
@@ -571,15 +623,14 @@ export function AppInsights({ api }: AppInsightsProps) {
                   <p className="text-lg font-bold text-primary">{formatNumber(stats.totalClients)}</p>
                   <p className="text-[10px] text-muted-foreground">Using apps</p>
                 </div>
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 shadow-md group-hover:scale-110 transition-transform">
+                <div className="p-1.5 rounded-lg badge-gradient-violet shadow-md group-hover:scale-110 transition-transform">
                   <Users className="h-3.5 w-3.5 text-white" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-card to-card/50 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-500 opacity-[0.08] group-hover:opacity-[0.12] transition-opacity" />
+          <Card className="relative overflow-hidden hover:shadow-xl hover:scale-[1.02] transition-all duration-300 group">
             <div className="absolute -right-6 -top-6 w-20 h-20 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all" />
             <CardContent className="p-3 relative">
               <div className="flex items-start justify-between">
@@ -591,7 +642,7 @@ export function AppInsights({ api }: AppInsightsProps) {
                   <p className="text-base font-bold truncate" style={{ color: 'var(--chart-3)' }}>{stats.topCategory}</p>
                   <p className="text-[10px] text-muted-foreground">{stats.topCategoryPercent}% of traffic</p>
                 </div>
-                <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 shadow-md group-hover:scale-110 transition-transform">
+                <div className="p-1.5 rounded-lg badge-gradient-amber shadow-md group-hover:scale-110 transition-transform">
                   <Zap className="h-3.5 w-3.5 text-white" />
                 </div>
               </div>
@@ -795,7 +846,7 @@ export function AppInsights({ api }: AppInsightsProps) {
             title="Data Usage"
             unit="bytes"
             icon={HardDrive}
-            color="bg-gradient-to-br from-blue-500 to-cyan-500"
+            color="badge-gradient-blue"
             widgetId="app-insights-data-usage"
             endpointRef="app_insights.top_apps"
           />
@@ -805,7 +856,7 @@ export function AppInsights({ api }: AppInsightsProps) {
             title="Client Count"
             unit="users"
             icon={Users}
-            color="bg-gradient-to-br from-violet-500 to-purple-500"
+            color="badge-gradient-violet"
             widgetId="app-insights-client-count"
             endpointRef="app_insights.top_apps"
           />
@@ -815,7 +866,7 @@ export function AppInsights({ api }: AppInsightsProps) {
             title="Throughput"
             unit="bps"
             icon={Gauge}
-            color="bg-gradient-to-br from-emerald-500 to-green-500"
+            color="badge-gradient-green"
             widgetId="app-insights-throughput"
             endpointRef="app_insights.top_apps"
           />

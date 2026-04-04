@@ -11,6 +11,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Activity, TrendingUp, TrendingDown, Wifi, Cable, Globe, RefreshCw, Calendar, Clock, AlertCircle, CheckCircle2, XCircle, Minus, Zap, BarChart3, MapPin, FolderTree, Radio, Database, Play, Pause, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiService } from '../services/api';
+import { useAppContext } from '@/contexts/AppContext';
 import { sleDataCollectionService, SLEDataPoint } from '../services/sleDataCollection';
 import { PageHeader } from './PageHeader';
 import { StatusBadge } from './StatusBadge';
@@ -99,6 +100,7 @@ const TIME_RANGES = [
 ];
 
 export function ServiceLevels() {
+  const { navigationScope, siteGroups: appSiteGroups } = useAppContext();
   const [scope, setScope] = useState<'wireless' | 'wired' | 'wan'>('wireless');
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(METRIC_CATALOG.wireless.map(m => m.key));
   const [rollup, setRollup] = useState('1m');
@@ -141,6 +143,11 @@ export function ServiceLevels() {
       unsubscribe();
     };
   }, []);
+
+  // Re-fetch filter options when navigation scope or site groups change
+  useEffect(() => {
+    loadFilterOptions();
+  }, [navigationScope, appSiteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When scope changes, update selected metrics to ALL metrics in the new scope
   useEffect(() => {
@@ -191,44 +198,51 @@ export function ServiceLevels() {
   const loadFilterOptions = async () => {
     setIsLoadingFilters(true);
     try {
-      // Load sites
-      const sitesResponse = await apiService.makeAuthenticatedRequest('/v1/sites', {
-        method: 'GET'
-      });
-      
-      if (sitesResponse.ok) {
-        const sitesData = await sitesResponse.json();
-        if (Array.isArray(sitesData)) {
-          setSites(sitesData.map((site: any) => ({
-            id: site.id || site.siteId,
-            name: site.name || site.siteName || 'Unnamed Site'
-          })));
-        }
-      }
+      const isOrgScope = navigationScope === 'global' && appSiteGroups.length > 0;
+      let allSites: Site[] = [];
+      let allNetworks: Network[] = [];
 
-      // Load networks (WLANs)
-      const networksResponse = await apiService.makeAuthenticatedRequest('/v1/networks', {
-        method: 'GET'
-      });
-      
-      if (networksResponse.ok) {
-        const networksData = await networksResponse.json();
-        if (Array.isArray(networksData)) {
-          setNetworks(networksData
-            .filter((net: any) => net.type === 'employee' || net.type === 'guest')
-            .map((net: any) => ({
-              id: net.id,
-              name: net.name,
-              ssid: net.ssid
+      const fetchFromController = async () => {
+        const sitesResponse = await apiService.makeAuthenticatedRequest('/v1/sites', { method: 'GET' });
+        if (sitesResponse.ok) {
+          const sitesData = await sitesResponse.json();
+          if (Array.isArray(sitesData)) {
+            allSites.push(...sitesData.map((site: any) => ({
+              id: site.id || site.siteId,
+              name: site.name || site.siteName || 'Unnamed Site'
             })));
+          }
         }
+        const networksResponse = await apiService.makeAuthenticatedRequest('/v1/networks', { method: 'GET' });
+        if (networksResponse.ok) {
+          const networksData = await networksResponse.json();
+          if (Array.isArray(networksData)) {
+            allNetworks.push(...networksData
+              .filter((net: any) => net.type === 'employee' || net.type === 'guest')
+              .map((net: any) => ({ id: net.id, name: net.name, ssid: net.ssid })));
+          }
+        }
+      };
+
+      if (isOrgScope) {
+        const originalBaseUrl = apiService.getBaseUrl();
+        for (const sg of appSiteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            await fetchFromController();
+          } catch (err) {
+            console.warn(`[ServiceLevels] Failed to fetch filters from ${sg.name}:`, err);
+          }
+        }
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        await fetchFromController();
       }
 
-      // Note: Site groups may not be available in all API versions
+      setSites(allSites);
+      setNetworks(allNetworks);
       setSiteGroups([]);
-      
     } catch (error) {
-      // Silently handle timeout errors - Extreme Platform ONE may be slow
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (!errorMessage.includes('timeout') && !errorMessage.includes('timed out')) {
         console.error('Error loading filter options:', error);
@@ -508,7 +522,7 @@ export function ServiceLevels() {
       </div>
 
       {/* Filters Bar */}
-      <Card className="surface-2dp border-primary/10 overflow-hidden">
+      <Card className="border-primary/10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 pointer-events-none" />
         <CardHeader className="relative">
           <CardTitle className="flex items-center gap-2">
@@ -673,7 +687,7 @@ export function ServiceLevels() {
 
       {/* Empty State */}
       {showEmptyState && (
-        <Card className="surface-1dp border-primary/10">
+        <Card className="border-primary/10">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <div className="p-4 rounded-full bg-muted/20 mb-4">
               <BarChart3 className="h-12 w-12 text-muted-foreground" />
@@ -696,7 +710,7 @@ export function ServiceLevels() {
 
       {/* Network Rewind Slider */}
       {!showEmptyState && (
-      <Card className="surface-2dp border-primary/10 overflow-hidden">
+      <Card className="border-primary/10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5 pointer-events-none" />
         <CardHeader className="relative">
           <CardTitle className="flex items-center gap-2">
@@ -775,7 +789,7 @@ export function ServiceLevels() {
             {currentMetrics.map((metric, index) => (
               <div 
                 key={metric.key} 
-                className="group relative overflow-hidden border rounded-xl p-5 surface-2dp hover:surface-4dp transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+                className="group relative overflow-hidden border rounded-xl p-5 hover:transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
               >
                 <div 
                   className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
@@ -836,7 +850,7 @@ export function ServiceLevels() {
 
       {/* Metrics Chart */}
       {!showEmptyState && (
-      <Card className="surface-1dp border-primary/10 overflow-hidden">
+      <Card className="border-primary/10 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-secondary/5 via-transparent to-primary/5 pointer-events-none" />
         <CardHeader className="relative">
           <CardTitle className="flex items-center gap-2">
@@ -911,7 +925,7 @@ export function ServiceLevels() {
 
       {/* Details Table */}
       {!showEmptyState && (
-      <Card className="surface-1dp border-primary/10">
+      <Card className="border-primary/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">

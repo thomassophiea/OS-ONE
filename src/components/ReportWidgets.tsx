@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 import { apiService } from '../services/api';
+import { useAppContext } from '@/contexts/AppContext';
 import { toast } from 'sonner';
 
 interface ReportWidget {
@@ -45,6 +46,7 @@ interface WidgetData {
 }
 
 export function ReportWidgets() {
+  const { navigationScope, siteGroups } = useAppContext();
   const [widgets, setWidgets] = useState<ReportWidget[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,11 +58,11 @@ export function ReportWidgets() {
   const widgetDefinitions: Omit<ReportWidget, 'value' | 'status' | 'lastUpdated'>[] = [
     {
       id: 'network-utilization',
-      title: 'Network Utilization',
-      description: 'Current network bandwidth usage across all sites',
-      unit: '%',
+      title: 'Client Load Index',
+      description: 'Connected client count as a proxy for network load (no site-scoped channel utilization without a site filter)',
+      unit: 'clients',
       icon: Activity,
-      endpoint: '/v1/services/report/widgets/network-utilization',
+      endpoint: '/v1/stations',
       category: 'network'
     },
     {
@@ -83,11 +85,11 @@ export function ReportWidgets() {
     },
     {
       id: 'throughput',
-      title: 'Network Throughput',
-      description: 'Current data throughput across the network',
-      unit: 'Mbps',
+      title: 'Total Traffic Volume',
+      description: 'Cumulative data transferred by all connected clients (lifetime bytes, not a rate)',
+      unit: 'MB',
       icon: TrendingUp,
-      endpoint: '/v1/services/report/widgets/throughput',
+      endpoint: '/v1/stations',
       category: 'network'
     },
     {
@@ -101,29 +103,29 @@ export function ReportWidgets() {
     },
     {
       id: 'security-events',
-      title: 'Security Events',
-      description: 'Number of security events in the last 24 hours',
+      title: 'Security Notifications',
+      description: 'Security-related notifications in the last 24 hours (sourced from /v1/notifications)',
       unit: 'events',
       icon: Shield,
-      endpoint: '/v1/services/report/widgets/security-events',
+      endpoint: '/v1/notifications',
       category: 'security'
     },
     {
       id: 'alerts-count',
       title: 'Active Alerts',
-      description: 'Current number of unresolved alerts',
+      description: 'Warning/critical notifications not yet resolved (sourced from /v1/notifications)',
       unit: 'alerts',
       icon: AlertTriangle,
-      endpoint: '/v1/services/report/widgets/alerts-count',
+      endpoint: '/v1/notifications',
       category: 'monitoring'
     },
     {
       id: 'performance-score',
-      title: 'Performance Score',
-      description: 'Overall network performance rating',
+      title: 'Performance Score (Derived)',
+      description: 'Composite score: AP connectivity % + client signal quality %. No direct API analog.',
       unit: '/100',
       icon: BarChart3,
-      endpoint: '/v1/services/report/widgets/performance-score',
+      endpoint: '/v1/aps',
       category: 'analytics'
     }
   ];
@@ -137,19 +139,20 @@ export function ReportWidgets() {
       switch (widget.id) {
         case 'network-utilization':
           try {
-            // Try to get throughput data from stations/clients
+            // NOTE: Real channel utilization requires /v1/report/sites/{siteId} with channelUtil widget.
+            // Without a site scope, we use connected client count as a "Client Load Index" proxy.
+            // This is a derived metric, not actual RF channel utilization.
             const stationsResp = await apiService.makeAuthenticatedRequest('/v1/stations', { method: 'GET' }, 8000);
             if (stationsResp.ok) {
               const stations = await stationsResp.json();
               const stationsArray = Array.isArray(stations) ? stations : [];
-              // Calculate network utilization based on active clients
-              // Assume 1% utilization per 10 active clients (simplified metric)
-              const utilization = Math.min(Math.round(stationsArray.length / 10), 100);
+              // Client Load Index: 1 point per client, max 100. Reflects congestion tendency.
+              const utilization = Math.min(stationsArray.length, 100);
               value = utilization;
               status = utilization > 85 ? 'critical' : utilization > 70 ? 'warning' : 'healthy';
             }
           } catch (err) {
-            console.log('Failed to fetch network utilization data');
+            console.log('Failed to fetch client load data');
           }
           break;
 
@@ -196,23 +199,25 @@ export function ReportWidgets() {
 
         case 'throughput':
           try {
-            // Calculate total throughput from client traffic stats
+            // NOTE: station inBytes/outBytes are cumulative lifetime totals, not a rate.
+            // Real throughput requires /v1/report/sites/{siteId} with throughputReport widget.
+            // We sum cumulative bytes as a traffic volume indicator (total MB transferred).
             const stationsResp = await apiService.makeAuthenticatedRequest('/v1/stations', { method: 'GET' }, 8000);
             if (stationsResp.ok) {
               const stations = await stationsResp.json();
               const stationsArray = Array.isArray(stations) ? stations : [];
-              
-              // Sum up traffic bytes and convert to Mbps (simplified calculation)
+
+              // Sum cumulative bytes and convert to MB as a traffic volume indicator
               let totalBytes = 0;
               stationsArray.forEach((station: any) => {
                 const inBytes = station.inBytes || station.rxBytes || 0;
                 const outBytes = station.outBytes || station.txBytes || 0;
                 totalBytes += inBytes + outBytes;
               });
-              
-              // Convert bytes to Mbps (assuming last minute of traffic)
-              const mbps = Math.round((totalBytes * 8) / (1024 * 1024 * 60));
-              value = mbps;
+
+              // Display as total MB transferred (cumulative volume, not rate)
+              const totalMB = Math.round(totalBytes / (1024 * 1024));
+              value = totalMB;
               status = 'healthy';
             }
           } catch (err) {
@@ -247,124 +252,111 @@ export function ReportWidgets() {
 
         case 'security-events':
           try {
-            // Try to get security-specific events first
-            let securityEvents = [];
-            
-            // Try /v1/events?type=security or similar filtered endpoint
-            const eventsEndpoints = [
-              '/v1/events?type=security',
-              '/v1/events?severity=critical',
-              '/v1/alerts?type=security',
-              '/v1/events',
-              '/v1/notifications'
-            ];
-            
-            for (const endpoint of eventsEndpoints) {
-              try {
-                const eventsResp = await apiService.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 8000);
-                if (eventsResp.ok) {
-                  const eventsData = await eventsResp.json();
-                  const events = Array.isArray(eventsData) ? eventsData : (eventsData.events || eventsData.notifications || []);
-                  
-                  // Filter for security-related events in the last 24 hours
-                  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-                  securityEvents = events.filter((event: any) => {
-                    const timestamp = event.timestamp || event.time || event.createdAt || 0;
-                    const eventType = (event.type || '').toLowerCase();
-                    const eventCategory = (event.category || '').toLowerCase();
-                    const eventSeverity = (event.severity || '').toLowerCase();
-                    const eventDescription = (event.description || event.message || '').toLowerCase();
-                    
-                    const isSecurity = eventType.includes('security') || 
-                                     eventCategory.includes('security') ||
-                                     eventSeverity === 'critical' ||
-                                     eventDescription.includes('security') ||
-                                     eventDescription.includes('intrusion') ||
-                                     eventDescription.includes('breach') ||
-                                     eventDescription.includes('unauthorized');
-                    
-                    const isRecent = timestamp > oneDayAgo;
-                    return isSecurity && isRecent;
-                  });
-                  
-                  if (securityEvents.length > 0 || endpoint === '/v1/notifications') {
-                    // Got data or reached last endpoint
-                    break;
-                  }
-                }
-              } catch (err) {
-                continue;
-              }
+            // /v1/events and /v1/alerts are NOT in Swagger. Use /v1/notifications (Swagger: NotificationManager).
+            // Filter notifications for security-related keywords and critical severity.
+            const notifResp = await apiService.makeAuthenticatedRequest('/v1/notifications', { method: 'GET' }, 8000);
+            if (notifResp.ok) {
+              const notifData = await notifResp.json();
+              const notifications = Array.isArray(notifData) ? notifData : (notifData.notifications || []);
+
+              // Filter for security-related notifications in the last 24 hours
+              const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+              const securityNotifications = notifications.filter((n: any) => {
+                const timestamp = n.timestamp || n.time || n.createdAt || 0;
+                const nType = (n.type || '').toLowerCase();
+                const nCategory = (n.category || '').toLowerCase();
+                const nSeverity = (n.severity || '').toLowerCase();
+                const nMessage = (n.description || n.message || '').toLowerCase();
+
+                const isSecurity =
+                  nType.includes('security') ||
+                  nCategory.includes('security') ||
+                  nSeverity === 'critical' ||
+                  nMessage.includes('security') ||
+                  nMessage.includes('intrusion') ||
+                  nMessage.includes('breach') ||
+                  nMessage.includes('unauthorized') ||
+                  nMessage.includes('rogue');
+
+                const isRecent = !timestamp || timestamp > oneDayAgo;
+                return isSecurity && isRecent;
+              });
+
+              value = securityNotifications.length;
+              status = value > 5 ? 'critical' : value > 2 ? 'warning' : 'healthy';
             }
-            
-            value = securityEvents.length;
-            status = value > 5 ? 'critical' : value > 2 ? 'warning' : 'healthy';
           } catch (err) {
-            console.log('Failed to fetch security events');
+            console.log('Failed to fetch security notifications');
           }
           break;
 
         case 'alerts-count':
           try {
-            // Get current active alerts
-            const alertsResp = await apiService.makeAuthenticatedRequest('/v1/alerts', { method: 'GET' }, 8000);
+            // /v1/alerts is NOT in Swagger. Use /v1/notifications (Swagger: NotificationManager).
+            // Count notifications with warning or critical severity as "active alerts".
+            const alertsResp = await apiService.makeAuthenticatedRequest('/v1/notifications', { method: 'GET' }, 8000);
             if (alertsResp.ok) {
               const alertsData = await alertsResp.json();
-              const alerts = Array.isArray(alertsData) ? alertsData : (alertsData.alerts || []);
-              
-              // Count unresolved alerts
-              const activeAlerts = alerts.filter((alert: any) => 
-                alert.status !== 'resolved' && alert.status !== 'cleared'
-              );
-              
+              const notifications = Array.isArray(alertsData) ? alertsData : (alertsData.notifications || []);
+
+              // Count notifications that represent active issues (warning or critical severity)
+              const activeAlerts = notifications.filter((n: any) => {
+                const sev = (n.severity || '').toLowerCase();
+                const resolved = (n.status || '').toLowerCase();
+                return (sev === 'warning' || sev === 'critical') &&
+                  resolved !== 'resolved' && resolved !== 'cleared';
+              });
+
               value = activeAlerts.length;
               status = value > 3 ? 'critical' : value > 1 ? 'warning' : 'healthy';
             }
           } catch (err) {
-            console.log('Failed to fetch alerts count');
+            console.log('Failed to fetch active alerts from notifications');
           }
           break;
 
         case 'performance-score':
           try {
-            // Calculate performance score based on AP health and client connectivity
+            // DERIVED SCORE: No single Swagger endpoint provides a "performance score".
+            // Formula: (% APs connected * 50) + (% clients with signal > -60dBm * 50).
+            // This is a composite heuristic. No real API analog exists.
             const [apsResp, stationsResp] = await Promise.all([
               apiService.makeAuthenticatedRequest('/v1/aps', { method: 'GET' }, 8000),
               apiService.makeAuthenticatedRequest('/v1/stations', { method: 'GET' }, 8000)
             ]);
-            
+
             let apScore = 50;
             let clientScore = 50;
-            
+
             if (apsResp.ok) {
               const apsData = await apsResp.json();
               const aps = Array.isArray(apsData) ? apsData : (apsData.aps || []);
               const totalAPs = aps.length;
               const connectedAPs = aps.filter((ap: any) => {
-                const status = ap.status?.toLowerCase() || '';
-                return status === 'connected' || status === 'online';
+                const apStatus = ap.status?.toLowerCase() || '';
+                return apStatus === 'connected' || apStatus === 'online';
               }).length;
-              
+
               if (totalAPs > 0) {
                 apScore = Math.round((connectedAPs / totalAPs) * 50);
               }
             }
-            
+
             if (stationsResp.ok) {
               const stations = await stationsResp.json();
               const stationsArray = Array.isArray(stations) ? stations : [];
-              
-              // Score based on client signal quality
+
+              // Score based on client signal quality (signal > -60 dBm is "good")
               const goodSignalClients = stationsArray.filter((s: any) => {
                 const signal = s.signalStrength || s.rss;
                 return signal && signal > -60;
               }).length;
-              
+
               if (stationsArray.length > 0) {
                 clientScore = Math.round((goodSignalClients / stationsArray.length) * 50);
               }
             }
-            
+
             value = Math.min(apScore + clientScore, 100);
             status = value < 70 ? 'critical' : value < 85 ? 'warning' : 'healthy';
           } catch (err) {
@@ -409,12 +401,53 @@ export function ReportWidgets() {
   const loadWidgets = async () => {
     try {
       setLoading(true);
-      
-      // Fetch data for all widgets concurrently
-      const widgetPromises = widgetDefinitions.map(widget => fetchWidgetData(widget));
-      const loadedWidgets = await Promise.all(widgetPromises);
-      
-      setWidgets(loadedWidgets);
+
+      const isOrgScope = navigationScope === 'global' && siteGroups.length > 0;
+
+      if (isOrgScope) {
+        // Org scope: fetch from all controllers and aggregate
+        const originalBaseUrl = apiService.getBaseUrl();
+        const allResults: ReportWidget[][] = [];
+
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const results = await Promise.all(widgetDefinitions.map(w => fetchWidgetData(w)));
+            allResults.push(results);
+          } catch (err) {
+            console.warn(`[ReportWidgets] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+
+        // Merge: sum numeric values, pick worst status
+        const merged = widgetDefinitions.map((def, idx) => {
+          let totalValue = 0;
+          let worstStatus: 'healthy' | 'warning' | 'critical' = 'healthy';
+          const statusPriority = { healthy: 0, warning: 1, critical: 2 };
+
+          for (const controllerWidgets of allResults) {
+            const w = controllerWidgets[idx];
+            if (w && typeof w.value === 'number') totalValue += w.value;
+            if (w && statusPriority[w.status] > statusPriority[worstStatus]) worstStatus = w.status;
+          }
+
+          // For percentage-based widgets (ap-health, signal-quality), average instead of sum
+          if ((def.id === 'ap-health' || def.id === 'signal-quality') && allResults.length > 0) {
+            totalValue = Math.round(totalValue / allResults.length);
+          }
+
+          return { ...def, value: totalValue, status: worstStatus, lastUpdated: new Date() } as ReportWidget;
+        });
+
+        setWidgets(merged);
+      } else {
+        // Single controller
+        const widgetPromises = widgetDefinitions.map(widget => fetchWidgetData(widget));
+        const loadedWidgets = await Promise.all(widgetPromises);
+        setWidgets(loadedWidgets);
+      }
     } catch (error) {
       console.log('SUPPRESSED_ANALYTICS_ERROR: Error loading report widgets:', error);
       toast.error('Failed to load some widgets', {
@@ -434,11 +467,11 @@ export function ReportWidgets() {
 
   useEffect(() => {
     loadWidgets();
-    
+
     // Set up auto-refresh every 30 seconds
     const interval = setInterval(loadWidgets, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter widgets based on search and filters
   const filteredWidgets = widgets.filter(widget => {
@@ -482,7 +515,7 @@ export function ReportWidgets() {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="surface-2dp">
+            <Card key={i}>
               <CardHeader className="pb-3">
                 <div className="h-4 bg-muted rounded animate-pulse mb-2" />
                 <div className="h-3 bg-muted rounded animate-pulse w-3/4" />
@@ -522,7 +555,7 @@ export function ReportWidgets() {
       </div>
 
       {/* Filters */}
-      <Card className="surface-1dp">
+      <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -574,7 +607,7 @@ export function ReportWidgets() {
           const IconComponent = widget.icon;
           
           return (
-            <Card key={widget.id} className="surface-2dp hover:surface-4dp transition-all duration-200">
+            <Card key={widget.id} className="hover:transition-all duration-200">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -626,7 +659,7 @@ export function ReportWidgets() {
       </div>
 
       {filteredWidgets.length === 0 && !loading && (
-        <Card className="surface-1dp">
+        <Card>
           <CardContent className="p-12 text-center">
             <Filter className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium mb-2">No widgets found</h3>
@@ -638,7 +671,7 @@ export function ReportWidgets() {
       )}
 
       {/* Summary Stats */}
-      <Card className="surface-1dp">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Widget Summary</CardTitle>
         </CardHeader>

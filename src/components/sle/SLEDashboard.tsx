@@ -17,6 +17,7 @@ import { Slider } from '../ui/slider';
 import { RefreshCw, Building, Clock, Target, Wifi, Cable, Network, Hexagon, AlignLeft, Settings2 } from 'lucide-react';
 import { apiService, Site } from '../../services/api';
 import { useGlobalFilters } from '../../hooks/useGlobalFilters';
+import { useAppContext } from '@/contexts/AppContext';
 import { sleDataCollectionService } from '../../services/sleDataCollection';
 import { computeAllWirelessSLEs, setActiveThresholds } from '../../services/sleCalculationEngine';
 import { SLERadialMap } from './SLERadialMap';
@@ -160,6 +161,7 @@ const saveSiteThresholds = (siteId: string, thresholds: SLEThresholds) => {
 
 export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
   const { filters, updateFilter } = useGlobalFilters();
+  const { navigationScope, siteGroups } = useAppContext();
 
   const [wirelessSLEs, setWirelessSLEs] = useState<SLEMetric[]>([]);
   const [stations, setStations] = useState<any[]>([]);
@@ -169,7 +171,8 @@ export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [timeRange, setTimeRange] = useState('24h');
-  const [selectedSite, setSelectedSite] = useState(filters.site || 'all');
+  const selectedSite = filters.site || 'all';
+  const setSelectedSite = (value: string) => updateFilter('site', value);
   const [activeTab, setActiveTab] = useState('wireless');
   const [viewMode, setViewMode] = useState<'radial' | 'octopus' | 'honeycomb' | 'waterfall'>('radial');
   
@@ -245,13 +248,6 @@ export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
     apiService.getSites().then(setSites).catch(() => {});
   }, []);
 
-  // Sync site filter to global filters
-  useEffect(() => {
-    if (selectedSite !== filters.site) {
-      updateFilter('site', selectedSite);
-    }
-  }, [selectedSite]);
-
   // Load data
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -259,28 +255,49 @@ export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
       else setLoading(true);
 
       const siteFilter = selectedSite !== 'all' ? selectedSite : undefined;
+      const isOrgScope = navigationScope === 'global' && siteGroups.length > 0;
 
-      // Fetch stations and APs in parallel
-      const [stationsData, apsData] = await Promise.all([
-        siteFilter
-          ? apiService.makeAuthenticatedRequest(`/v3/sites/${siteFilter}/stations`, { method: 'GET' }, 15000)
-              .then(r => r.ok ? r.json() : null)
-              .then(d => d ? (Array.isArray(d) ? d : (d.stations || d.clients || d.data || [])) : [])
-              .catch(() => apiService.getStations().then(all => {
-                // Client-side filter fallback
-                return apiService.getSiteById(siteFilter).then(site => {
-                  const name = site?.name || site?.siteName || siteFilter;
-                  return all.filter((s: any) => s.siteName === name || s.siteId === siteFilter || s.siteName === siteFilter);
-                });
-              }).catch(() => []))
-          : apiService.getStations(),
-        siteFilter
-          ? apiService.getAccessPointsBySite(siteFilter)
-          : apiService.getAccessPoints(),
-      ]);
+      let stationsArr: any[] = [];
+      let apsArr: any[] = [];
 
-      const stationsArr = Array.isArray(stationsData) ? stationsData : [];
-      const apsArr = Array.isArray(apsData) ? apsData : [];
+      if (isOrgScope) {
+        // Org scope: fetch from all controllers and aggregate
+        const originalBaseUrl = apiService.getBaseUrl();
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const [sgStations, sgAps] = await Promise.all([
+              apiService.getStations(),
+              apiService.getAccessPoints(),
+            ]);
+            stationsArr.push(...(Array.isArray(sgStations) ? sgStations : []));
+            apsArr.push(...(Array.isArray(sgAps) ? sgAps : []));
+          } catch (err) {
+            console.warn(`[SLEDashboard] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        // Single controller
+        const [stationsData, apsData] = await Promise.all([
+          siteFilter
+            ? apiService.makeAuthenticatedRequest(`/v3/sites/${siteFilter}/stations`, { method: 'GET' }, 15000)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => d ? (Array.isArray(d) ? d : (d.stations || d.clients || d.data || [])) : [])
+                .catch(() => apiService.getStations().then(all => {
+                  return apiService.getSiteById(siteFilter!).then(site => {
+                    const name = site?.name || site?.siteName || siteFilter;
+                    return all.filter((s: any) => s.siteName === name || s.siteId === siteFilter || s.siteName === siteFilter);
+                  });
+                }).catch(() => []))
+            : apiService.getStations(),
+          siteFilter
+            ? apiService.getAccessPointsBySite(siteFilter)
+            : apiService.getAccessPoints(),
+        ]);
+        stationsArr = Array.isArray(stationsData) ? stationsData : [];
+        apsArr = Array.isArray(apsData) ? apsData : [];
+      }
 
       setStations(stationsArr);
       setAps(apsArr);
@@ -309,7 +326,7 @@ export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSite, timeRange, siteThresholds]);
+  }, [selectedSite, timeRange, siteThresholds, navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initial load + auto-refresh
   useEffect(() => {
@@ -388,35 +405,32 @@ export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
       </div>
 
       {/* Summary Bar */}
-      <ScrollArea className="w-full whitespace-nowrap">
-        <div className="flex items-center gap-2 pb-2">
-          {/* Overall score */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/50 flex-shrink-0">
-            <Target className="h-4 w-4 text-purple-400" />
-            <span className="text-xs font-medium">Overall</span>
-            <span className="text-sm font-bold" style={{ color: SLE_STATUS_COLORS[overallScore >= 95 ? 'good' : overallScore >= 80 ? 'warn' : 'poor'].hex }}>
-              {overallScore.toFixed(1)}%
-            </span>
-          </div>
-
-          {/* Per-SLE pills - clickable to edit thresholds */}
-          {wirelessSLEs.map(sle => (
-            <button
-              key={sle.id}
-              onClick={() => handleSLEClick(sle.id)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted/20 border border-border/30 hover:border-primary/50 hover:bg-muted/40 cursor-pointer transition-all flex-shrink-0 group"
-              title={`Click to adjust ${sle.name} threshold`}
-            >
-              <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{sle.name}</span>
-              <span className="text-xs font-bold" style={{ color: SLE_STATUS_COLORS[sle.status].hex }}>
-                {sle.successRate.toFixed(1)}%
-              </span>
-              <Settings2 className="h-3 w-3 text-muted-foreground/0 group-hover:text-muted-foreground transition-all" />
-            </button>
-          ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Overall score */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/50">
+          <Target className="h-4 w-4 text-purple-400" />
+          <span className="text-xs font-medium">Overall</span>
+          <span className="text-sm font-bold" style={{ color: SLE_STATUS_COLORS[overallScore >= 95 ? 'good' : overallScore >= 80 ? 'warn' : 'poor'].hex }}>
+            {overallScore.toFixed(1)}%
+          </span>
         </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+
+        {/* Per-SLE pills - clickable to edit thresholds */}
+        {wirelessSLEs.map(sle => (
+          <button
+            key={sle.id}
+            onClick={() => handleSLEClick(sle.id)}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-muted/20 border border-border/30 hover:border-primary/50 hover:bg-muted/40 cursor-pointer transition-all group"
+            title={`Click to adjust ${sle.name} threshold`}
+          >
+            <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{sle.name}</span>
+            <span className="text-xs font-bold" style={{ color: SLE_STATUS_COLORS[sle.status].hex }}>
+              {sle.successRate.toFixed(1)}%
+            </span>
+            <Settings2 className="h-3 w-3 text-muted-foreground/0 group-hover:text-muted-foreground transition-all" />
+          </button>
+        ))}
+      </div>
 
       {/* Tabs: Wireless / Wired */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
