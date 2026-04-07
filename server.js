@@ -11,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1); // Required for express-rate-limit behind Railway/reverse proxy
 const PORT = process.env.PORT || 3000;
 
 // Default Campus Controller URL (fallback if no dynamic controller specified)
