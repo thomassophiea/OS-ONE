@@ -170,10 +170,14 @@ export function useTimelineNavigation(scope: TimelineScope) {
     setState(scope, { zoomMode: mode });
   }, [scope]);
 
-  // Commit a drag selection as a zoom domain
+  // Commit a drag selection as a zoom domain (clears live preview overlay)
   const applyZoom = useCallback((start: number, end: number) => {
     const [lo, hi] = start < end ? [start, end] : [end, start];
-    setState(scope, { zoomDomain: [lo, hi], pendingRefetch: true });
+    setState(scope, {
+      zoomDomain: [lo, hi],
+      pendingRefetch: true,
+      timeWindow: { start: null, end: null },
+    });
   }, [scope]);
 
   // Clear zoom domain and pending refetch flag
