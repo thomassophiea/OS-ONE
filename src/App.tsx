@@ -260,9 +260,28 @@ export default function App() {
         console.log('[App] Starting SLE data collection service');
         sleDataCollectionService.startCollection();
       } else {
-        // No stored session - show login screen
-        console.log('[App] No valid session found - showing login screen');
-        setIsAuthenticated(false);
+        // Demo mode: auto-login to the lab controller
+        console.log('[App] No valid session found - attempting demo auto-login');
+        try {
+          apiService.setBaseUrl('https://tsophiea.ddns.net');
+          await apiService.login('ReadOnly', 'ReadOnly');
+          console.log('[App] ✅ Demo auto-login successful');
+          setIsAuthenticated(true);
+          setAdminRole(apiService.getAdminRole());
+          try {
+            const sites = await apiService.getSites();
+            if (sites && sites.length > 0) {
+              const firstSite = sites[0];
+              setSiteName(firstSite.displayName || firstSite.name || firstSite.siteName || 'Site');
+            }
+          } catch {
+            setSiteName('Demo Site');
+          }
+          sleDataCollectionService.startCollection();
+        } catch (error) {
+          console.warn('[App] Demo auto-login failed, showing login screen:', error);
+          setIsAuthenticated(false);
+        }
       }
     };
 
