@@ -5,7 +5,7 @@
  * Shows throughput, power consumption, client count, channel utilization, etc.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -39,9 +39,9 @@ import {
   ArrowLeft,
   Clock
 } from 'lucide-react';
-import { apiService, APInsightsResponse, APInsightsReport, APInsightsStatistic } from '../services/api';
+import { apiService, APInsightsResponse, APInsightsReport, APInsightsStatistic, APAlarmCategory } from '../services/api';
 import { useTimelineNavigation } from '../hooks/useTimelineNavigation';
-import { TimelineControls } from './timeline';
+import { TimelineControls, MasterTimeline, MasterTimelineEvent } from './timeline';
 
 interface APInsightsProps {
   serialNumber: string;
@@ -344,11 +344,31 @@ interface APInsightsFullScreenProps {
   onClose: () => void;
 }
 
+function getDomainFromDuration(dur: string): [number, number] {
+  const now = Date.now();
+  const ms: Record<string, number> = {
+    '3H':  3  * 60 * 60 * 1000,
+    '24H': 24 * 60 * 60 * 1000,
+    '7D':  7  * 24 * 60 * 60 * 1000,
+    '30D': 30 * 24 * 60 * 60 * 1000,
+  };
+  return [now - (ms[dur] ?? ms['3H']), now];
+}
+
+function mapAPAlarmSeverity(level: string): MasterTimelineEvent['severity'] {
+  const l = (level ?? '').toLowerCase();
+  if (l.includes('critical')) return 'critical';
+  if (l.includes('major'))    return 'major';
+  if (l.includes('minor'))    return 'minor';
+  return 'info';
+}
+
 export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsightsFullScreenProps) {
   const [insights, setInsights] = useState<APInsightsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [duration, setDuration] = useState('3H');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [timelineEvents, setTimelineEvents] = useState<MasterTimelineEvent[]>([]);
 
   const durationOption = DURATION_OPTIONS.find(d => d.value === duration) || DURATION_OPTIONS[0];
 
@@ -392,6 +412,43 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
       cancelled = true;
     };
   }, [serialNumber, duration, refreshKey]);
+
+  // Load AP alarm events for the timeline swim lane
+  useEffect(() => {
+    let cancelled = false;
+    apiService.getAccessPointEvents(serialNumber).then((cats: APAlarmCategory[]) => {
+      if (cancelled) return;
+      const flat = apiService.flattenAPEvents(cats);
+      setTimelineEvents(
+        flat.map(alarm => ({
+          timestamp: alarm.ts,
+          category: alarm.Category || alarm.Context || 'Event',
+          severity: mapAPAlarmSeverity(alarm.Level),
+          message: alarm.log || '',
+        }))
+      );
+    }).catch(() => {/* events are non-critical */});
+    return () => { cancelled = true; };
+  }, [serialNumber]);
+
+  // Refetch with finer resolution after user zooms into a window
+  const handleTimelineRefetch = useCallback((windowStart: number, windowEnd: number) => {
+    const spanMs = windowEnd - windowStart;
+    let resolution: number;
+    if (spanMs < 3 * 60 * 60 * 1000)  resolution = 1;
+    else if (spanMs < 12 * 60 * 60 * 1000) resolution = 5;
+    else if (spanMs < 48 * 60 * 60 * 1000) resolution = 15;
+    else                                    resolution = 60;
+
+    setIsLoading(true);
+    apiService.getAccessPointInsights(serialNumber, duration, resolution)
+      .then(data => {
+        setInsights(data);
+        timeline.clearPendingRefetch();
+      })
+      .catch(err => console.error('Refetch failed:', err))
+      .finally(() => setIsLoading(false));
+  }, [serialNumber, duration, timeline]);
 
   // Soft reset timeline when duration changes (preserve lock state and current time)
   useEffect(() => {
@@ -453,6 +510,11 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
       return 0;
     });
   }, [throughputData, powerData, clientData, rssData, channelUtil5Data, channelUtil24Data, noiseData]);
+
+  // X-axis domain — apply zoom when in zoom mode and a domain is committed
+  const xAxisDomain = timeline.zoomMode === 'zoom' && timeline.zoomDomain
+    ? [timeline.zoomDomain[0], timeline.zoomDomain[1]] as [number, number]
+    : (['dataMin', 'dataMax'] as const);
 
   // Render individual chart based on id
   const renderChart = (config: { id: string; title: string; data: any[]; hasData: boolean }) => {
@@ -528,7 +590,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatValue(v, 'bps')} width={70} />
                     <Tooltip formatter={(value: number) => [formatValue(value, 'bps'), '']} labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -606,7 +668,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                     onMouseUp={() => timeline.endTimeWindow()}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} W`} width={50} />
                     <Tooltip labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -682,7 +744,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                     onMouseUp={() => timeline.endTimeWindow()}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} width={40} />
                     <Tooltip labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -778,7 +840,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} dBm`} width={60} domain={['auto', 'auto']} />
                     <Tooltip formatter={(v: number) => [`${v.toFixed(0)} dBm`, '']} labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -875,7 +937,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                     onMouseUp={() => timeline.endTimeWindow()}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} width={40} domain={[0, 100]} />
                     <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, '']} labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -973,7 +1035,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                     onMouseUp={() => timeline.endTimeWindow()}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} width={40} domain={[0, 100]} />
                     <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, '']} labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -1066,7 +1128,7 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
                     onMouseUp={() => timeline.endTimeWindow()}
                   >
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="timestamp" tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
+                    <XAxis dataKey="timestamp" type="number" domain={xAxisDomain} tick={{ fontSize: 11 }} tickFormatter={(ts) => formatXAxisTick(ts, duration)} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v} dBm`} width={60} />
                     <Tooltip formatter={(v: number) => [`${v.toFixed(0)} dBm`, '']} labelFormatter={() => ''} contentStyle={COMPACT_TOOLTIP_STYLE} />
                     <Legend />
@@ -1136,6 +1198,15 @@ export function APInsightsFullScreen({ serialNumber, apName, onClose }: APInsigh
             </Button>
           </div>
         </div>
+
+        {/* Master Timeline — ruler + event swim lane + drag brush */}
+        <MasterTimeline
+          scope="ap-insights"
+          dataDomain={getDomainFromDuration(duration)}
+          events={timelineEvents}
+          duration={duration}
+          onRefetch={handleTimelineRefetch}
+        />
 
         {/* Timeline Controls */}
         <TimelineControls
