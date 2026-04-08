@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, memo, useCallback } from 'react';
+import { VerticalBenchmarking } from './VerticalBenchmarking';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Skeleton } from './ui/skeleton';
 import { Badge } from './ui/badge';
@@ -1527,6 +1528,9 @@ function DashboardEnhancedComponent() {
 
   return (
     <div className="space-y-4">
+      {/* Vertical Benchmarking & Peer Intelligence */}
+      <VerticalBenchmarking />
+
       {/* Compact Header with Context Selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
