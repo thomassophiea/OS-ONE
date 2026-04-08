@@ -28,8 +28,8 @@ const SEVERITY_COLOR: Record<string, string> = {
   info:     '#3b82f6',
 };
 
-const RULER_H = 34;
-const LANE_H  = 52;
+const RULER_H = 44;
+const LANE_H  = 76;
 const SVG_H   = RULER_H + LANE_H;
 const TICK_COUNT = 7;
 const MIN_DRAG_MS = 2000; // minimum selection to commit as zoom
@@ -103,8 +103,13 @@ export function MasterTimeline({ scope, dataDomain, events, duration, onRefetch 
   };
 
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!isDragging.current || !svgRef.current) return;
-    timeline.updateTimeWindow(getTs(e));
+    if (!svgRef.current) return;
+    const ts = getTs(e);
+    // Always sync cursor to charts below (hook ignores if locked)
+    timeline.setCurrentTime(ts);
+    if (isDragging.current) {
+      timeline.updateTimeWindow(ts);
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -125,6 +130,8 @@ export function MasterTimeline({ scope, dataDomain, events, duration, onRefetch 
   };
 
   const handleMouseLeave = () => {
+    // Clear cursor line in charts when leaving the timeline ruler
+    timeline.setCurrentTime(null);
     if (isDragging.current) {
       isDragging.current = false;
       timeline.endTimeWindow();
