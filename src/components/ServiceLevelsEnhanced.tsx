@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { VerticalBenchmarking } from './VerticalBenchmarking';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -664,9 +663,6 @@ export function ServiceLevelsEnhanced() {
 
   return (
     <div className="space-y-6">
-      {/* Vertical Benchmarking & Peer Intelligence */}
-      <VerticalBenchmarking />
-
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
