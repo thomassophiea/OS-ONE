@@ -166,69 +166,50 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
     onToggle: () => void;
   }) => (
     <div className="space-y-1">
-      {/* Collapsed: show only the section icon, no sub-items */}
-      {isCollapsed ? (
-        <Button
-          variant={isActive ? "default" : "ghost"}
-          className={cn(
-            "w-full justify-center h-10 px-0",
-            isActive
-              ? "bg-sidebar-primary text-sidebar-primary-foreground"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          )}
-          onClick={onToggle}
-          title={label}
-        >
-          <SectionIcon className="h-4 w-4" />
-        </Button>
-      ) : (
-        <>
-          <Button
-            variant={isActive ? "default" : "ghost"}
-            className={cn(
-              "w-full justify-start h-10 px-3",
-              isActive
-                ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            )}
-            onClick={onToggle}
-          >
-            <SectionIcon className="h-4 w-4 mr-2" />
-            <span className="flex-1 text-left">{label}</span>
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-          {isExpanded && (
-            <div className="ml-6 space-y-1">
-              {items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Button
-                    key={item.id}
-                    variant={currentPage === item.id ? "default" : "ghost"}
-                    className={cn(
-                      "w-full justify-start h-9 text-sm px-3",
-                      currentPage === item.id
-                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    )}
-                    onClick={() => handlePageChange(item.id)}
-                    onMouseEnter={() => prefetchComponent(item.id)}
-                  >
-                    <Icon className="h-3 w-3 mr-2" />
-                    <span className="flex items-center gap-2">
-                      {item.label}
-                      {item.badge && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] font-medium uppercase tracking-wide">
-                          {item.badge}
-                        </span>
-                      )}
+      <Button
+        variant={isActive ? "default" : "ghost"}
+        className={cn(
+          "w-full justify-start h-10 px-3",
+          isActive
+            ? "bg-sidebar-primary text-sidebar-primary-foreground"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        )}
+        onClick={onToggle}
+      >
+        <SectionIcon className="h-4 w-4 mr-2" />
+        <span className="flex-1 text-left">{label}</span>
+        {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </Button>
+      {isExpanded && (
+        <div className="ml-6 space-y-1">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Button
+                key={item.id}
+                variant={currentPage === item.id ? "default" : "ghost"}
+                className={cn(
+                  "w-full justify-start h-9 text-sm px-3",
+                  currentPage === item.id
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
+                onClick={() => handlePageChange(item.id)}
+                onMouseEnter={() => prefetchComponent(item.id)}
+              >
+                <Icon className="h-3 w-3 mr-2" />
+                <span className="flex items-center gap-2">
+                  {item.label}
+                  {item.badge && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[color:var(--status-warning-bg)] text-[color:var(--status-warning)] font-medium uppercase tracking-wide">
+                      {item.badge}
                     </span>
-                  </Button>
-                );
-              })}
-            </div>
-          )}
-        </>
+                  )}
+                </span>
+              </Button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -253,11 +234,23 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         </button>
       )}
 
+      {/* Floating hamburger — only when collapsed on desktop */}
+      {!device.isMobile && isCollapsed && (
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="fixed z-50 p-1.5 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          style={{ top: 84, left: 16 }}
+          title="Expand sidebar"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Sidebar */}
       <div className={cn(
-        "bg-sidebar border-r border-sidebar-border h-full flex flex-col transition-all duration-300",
+        "bg-sidebar border-r border-sidebar-border h-full flex flex-col transition-all duration-300 overflow-hidden",
         // Desktop behavior
-        !device.isMobile && (isCollapsed ? "w-10" : "w-64"),
+        !device.isMobile && (isCollapsed ? "w-0 border-0" : "w-64"),
         // Mobile behavior
         device.isMobile && [
           "fixed inset-y-0 left-0 z-50 w-64",
@@ -266,20 +259,20 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         ]
       )}>
       {/* Header */}
-      <div className={cn("flex items-center", isCollapsed ? "justify-center p-1" : "px-4 py-3 justify-between")}>
+      <div className="flex items-center px-4 py-3 justify-between">
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={() => setIsCollapsed(true)}
           className="text-sidebar-foreground hover:bg-sidebar-accent"
-          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title="Collapse sidebar"
         >
           <Menu className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Navigation */}
-      <nav className={cn("flex-1 p-2 space-y-1 overflow-y-auto", isCollapsed && "hidden")}>
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {navigationScope === 'global' && (
           <>
             {/* Service Levels — top-level item */}
@@ -287,18 +280,16 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
               <Button
                 variant={currentPage === 'sle-dashboard' ? "default" : "ghost"}
                 className={cn(
-                  "w-full h-10",
-                  isCollapsed ? "justify-center px-0" : "justify-start px-3",
+                  "w-full h-10 justify-start px-3",
                   currentPage === 'sle-dashboard'
                     ? "bg-sidebar-primary text-sidebar-primary-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
                 onClick={() => handlePageChange('sle-dashboard')}
                 onMouseEnter={() => prefetchComponent('sle-dashboard')}
-                title={isCollapsed ? "Service Levels" : undefined}
               >
-                <TrendingUp className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                {!isCollapsed && <span>Service Levels</span>}
+                <TrendingUp className="h-4 w-4 mr-2" />
+                <span>Service Levels</span>
               </Button>
             )}
 
@@ -326,18 +317,16 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
             <Button
               variant={currentPage === 'workspace' ? "default" : "ghost"}
               className={cn(
-                "w-full h-10",
-                isCollapsed ? "justify-center px-0" : "justify-start px-3",
+                "w-full h-10 justify-start px-3",
                 currentPage === 'workspace'
                   ? "bg-sidebar-primary text-sidebar-primary-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}
               onClick={() => handlePageChange('workspace')}
               onMouseEnter={() => prefetchComponent('workspace')}
-              title={isCollapsed ? "Report Studio" : undefined}
             >
-              <LayoutDashboard className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-              {!isCollapsed && <span>Report Studio</span>}
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              <span>Report Studio</span>
             </Button>
 
             {/* Operations Section - Desktop only */}
@@ -357,34 +346,30 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
                   <Button
                     variant={currentPage === 'tools' ? "default" : "ghost"}
                     className={cn(
-                      "w-full h-10",
-                      isCollapsed ? "justify-center px-0" : "justify-start px-3",
+                      "w-full h-10 justify-start px-3",
                       currentPage === 'tools'
                         ? "bg-sidebar-primary text-sidebar-primary-foreground"
                         : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                     onClick={() => handlePageChange('tools')}
-                    title={isCollapsed ? "Tools" : undefined}
                   >
-                    <Wrench className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                    {!isCollapsed && <span>Tools</span>}
+                    <Wrench className="h-4 w-4 mr-2" />
+                    <span>Tools</span>
                   </Button>
                 )}
                 {isPageAllowed('administration') && (
                   <Button
                     variant={currentPage === 'administration' ? "default" : "ghost"}
                     className={cn(
-                      "w-full h-10",
-                      isCollapsed ? "justify-center px-0" : "justify-start px-3",
+                      "w-full h-10 justify-start px-3",
                       currentPage === 'administration'
                         ? "bg-sidebar-primary text-sidebar-primary-foreground"
                         : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                     onClick={() => handlePageChange('administration')}
-                    title={isCollapsed ? "Administration" : undefined}
                   >
-                    <Settings className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
-                    {!isCollapsed && <span>Administration</span>}
+                    <Settings className="h-4 w-4 mr-2" />
+                    <span>Administration</span>
                   </Button>
                 )}
               </>
@@ -395,29 +380,17 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         {navigationScope === 'site-group' && (
           <>
             {/* Back to Organization */}
-            {!isCollapsed && (
-              <Button
-                variant="ghost"
-                className="w-full justify-start h-10 px-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground mb-1"
-                onClick={() => exitSiteGroup()}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                <Globe className="h-3.5 w-3.5 mr-1.5" />
-                <span className="text-xs">Back to Organization</span>
-              </Button>
-            )}
-            {isCollapsed && (
-              <Button
-                variant="ghost"
-                className="w-full justify-center h-10 px-0 text-sidebar-foreground/70 hover:bg-sidebar-accent"
-                onClick={() => exitSiteGroup()}
-                title="Back to Organization"
-              >
-                <Globe className="h-4 w-4" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              className="w-full justify-start h-10 px-3 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground mb-1"
+              onClick={() => exitSiteGroup()}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              <Globe className="h-3.5 w-3.5 mr-1.5" />
+              <span className="text-xs">Back to Organization</span>
+            </Button>
             {/* Site group label */}
-            {!isCollapsed && siteGroup && (
+            {siteGroup && (
               <div className="px-3 py-1.5 mb-1">
                 <div className="text-[10px] text-sidebar-foreground/50 uppercase tracking-wider font-medium">Controller</div>
                 <div className="text-xs text-sidebar-foreground font-medium truncate">{siteGroup.name}</div>
@@ -438,11 +411,11 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
 
       </nav>
 
-      {!isCollapsed && <Separator className="bg-sidebar-border" />}
+      <Separator className="bg-sidebar-border" />
 
       {/* User Info & Theme Toggle & Logout */}
-      <div className={cn("p-4 space-y-2", isCollapsed && "hidden")}>
-        {!isCollapsed && adminRole && import.meta.env.DEV && (
+      <div className="p-4 space-y-2">
+        {adminRole && import.meta.env.DEV && (
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-sidebar-foreground/70">
               Role: {adminRole}
