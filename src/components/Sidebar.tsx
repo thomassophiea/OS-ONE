@@ -62,6 +62,8 @@ interface SidebarProps {
   onPageChange: (page: string) => void;
   theme?: 'light' | 'ep1' | 'dev';
   onThemeToggle?: () => void;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 // ── Org-level navigation (primary scope) ──
@@ -103,8 +105,7 @@ const controllerItems = [
   { id: 'guest-management', label: 'Guest Accounts', icon: UserPlus },
 ];
 
-export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme = 'ep1', onThemeToggle }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme = 'ep1', onThemeToggle, isCollapsed, onToggleCollapsed }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const branding = useBranding();
   const device = useDeviceDetection();
@@ -234,18 +235,6 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         </button>
       )}
 
-      {/* Floating hamburger — only when collapsed on desktop */}
-      {!device.isMobile && isCollapsed && (
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="fixed z-50 p-1.5 rounded-md text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-          style={{ top: 84, left: 16 }}
-          title="Expand sidebar"
-        >
-          <Menu className="h-4 w-4" />
-        </button>
-      )}
-
       {/* Sidebar */}
       <div className={cn(
         "bg-sidebar border-r border-sidebar-border h-full flex flex-col transition-all duration-300 overflow-hidden",
@@ -263,7 +252,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setIsCollapsed(true)}
+          onClick={onToggleCollapsed}
           className="text-sidebar-foreground hover:bg-sidebar-accent"
           title="Collapse sidebar"
         >
