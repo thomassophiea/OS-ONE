@@ -257,7 +257,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
       <div className={cn(
         "bg-sidebar border-r border-sidebar-border h-full flex flex-col transition-all duration-300",
         // Desktop behavior
-        !device.isMobile && (isCollapsed ? "w-16" : "w-64"),
+        !device.isMobile && (isCollapsed ? "w-10" : "w-64"),
         // Mobile behavior
         device.isMobile && [
           "fixed inset-y-0 left-0 z-50 w-64",
@@ -266,7 +266,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
         ]
       )}>
       {/* Header */}
-      <div className={cn("flex items-center", isCollapsed ? "justify-center p-2" : "px-4 py-3 justify-between")}>
+      <div className={cn("flex items-center", isCollapsed ? "justify-center p-1" : "px-4 py-3 justify-between")}>
         <Button
           variant="ghost"
           size="sm"
@@ -279,7 +279,7 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className={cn("flex-1 p-2 space-y-1 overflow-y-auto", isCollapsed && "hidden")}>
         {navigationScope === 'global' && (
           <>
             {/* Service Levels — top-level item */}
@@ -438,10 +438,10 @@ export function Sidebar({ onLogout, adminRole, currentPage, onPageChange, theme 
 
       </nav>
 
-      <Separator className="bg-sidebar-border" />
+      {!isCollapsed && <Separator className="bg-sidebar-border" />}
 
       {/* User Info & Theme Toggle & Logout */}
-      <div className="p-4 space-y-2">
+      <div className={cn("p-4 space-y-2", isCollapsed && "hidden")}>
         {!isCollapsed && adminRole && import.meta.env.DEV && (
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-sidebar-foreground/70">
