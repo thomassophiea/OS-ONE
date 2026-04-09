@@ -322,8 +322,10 @@ export default function App() {
       });
     };
 
-    // Set up API service session expiration handler
-    apiService.setSessionExpiredHandler(handleSessionExpired);
+    // Set up API service session expiration handler (no-op in demo mode)
+    if (import.meta.env.VITE_DEMO_MODE !== 'true') {
+      apiService.setSessionExpiredHandler(handleSessionExpired);
+    }
 
     // Cancel requests when page becomes hidden (user switches tabs/minimizes)
     const handleVisibilityChange = () => {
