@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent, type MouseEvent, type FormEvent, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ChangeEvent, type MouseEvent, type FormEvent, type ReactNode } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
@@ -7,6 +7,7 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import extremeNetworksLogo from 'figma:asset/f6780e138108fdbc214f37376d5cea1e3356ac35.png';
 import { apiService } from '../services/api';
 import { tenantService, Controller } from '../services/tenantService';
+import { bootstrapDemo } from '../lib/demoSeed';
 import { xiqService, XIQ_REGION_ORDER, XIQ_REGION_LABELS, type XIQRegion } from '../services/xiqService';
 import { toast } from 'sonner';
 
@@ -461,6 +462,11 @@ export function LoginForm({ onLoginSuccess, theme: _theme = 'ep1', onThemeToggle
     }
   };
 
+  const handleDemoLogin = useCallback(() => {
+    bootstrapDemo();
+    onLoginSuccess();
+  }, [onLoginSuccess]);
+
   const handleSkipXIQ = () => {
     if (controllers.length === 1 && selectedController) {
       setStep('credentials');
@@ -506,6 +512,42 @@ export function LoginForm({ onLoginSuccess, theme: _theme = 'ep1', onThemeToggle
           </CardHeader>
 
           <CardContent className="pt-4">
+            {/* Demo Mode Quick Launch */}
+            {import.meta.env.VITE_DEMO_MODE === 'true' && (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  className="w-full flex items-center justify-center gap-2 rounded-md px-4 py-3 text-sm font-semibold transition-colors"
+                  style={{
+                    background: 'linear-gradient(90deg, #92400e 0%, #b45309 50%, #92400e 100%)',
+                    color: '#fef3c7',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: '#fbbf24',
+                      boxShadow: '0 0 6px #fbbf24',
+                      flexShrink: 0,
+                    }}
+                  />
+                  Launch Demo — Meridian Retail Group
+                </button>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">or sign in</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Controller Selection Step */}
             {step === 'controller' && (
               <div className="space-y-4">

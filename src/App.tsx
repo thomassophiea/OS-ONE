@@ -4,6 +4,7 @@ import type { AssistantContext } from './components/NetworkChatbot';
 import { LoginForm } from './components/LoginForm';
 import { SharedReportViewer } from './components/SharedReportViewer';
 import { Sidebar } from './components/Sidebar';
+import { DemoBanner } from './components/DemoBanner';
 import { MobileApp } from './components/mobile/MobileApp';
 import { DetailSlideOut } from './components/DetailSlideOut';
 import { PlaceholderPage } from './components/PlaceholderPage';
@@ -1111,6 +1112,7 @@ export default function App() {
     <AppContextProvider navigationScope={navigationScope} onNavigationScopeChange={setNavigationScope} onPageChange={handlePageChange} onTemplateCreation={handleTemplateCreation}>
     <PersonaProvider theme={theme} activePersona={activePersona} setActivePersona={setActivePersona}>
     <>
+      <DemoBanner />
       {/* Unified floating-card layout — all themes */}
       <div
         className="flex flex-col bg-background"
