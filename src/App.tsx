@@ -72,7 +72,7 @@ import { sleDataCollectionService } from './services/sleDataCollection';
 import { Toaster } from './components/ui/sonner';
 import { PageSkeleton, getSkeletonVariant } from './components/ui/PageSkeleton';
 import { Button } from './components/ui/button';
-import { Activity, Sun, Moon, Braces, Github, FlaskConical, BarChart3, Bell, LayoutGrid } from 'lucide-react';
+import { Activity, Sun, Moon, Braces, Github, FlaskConical, BarChart3, Bell, LayoutGrid, Menu } from 'lucide-react';
 import { AppsMenu } from './components/AppsMenu';
 import { UserMenu } from './components/UserMenu';
 import { NotificationsMenu } from './components/NotificationsMenu';
@@ -149,6 +149,7 @@ export default function App() {
     return localStorage.getItem('networkAssistantEnabled') === 'true';
   });
   const [isDevModeOpen, setIsDevModeOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activePersona, setActivePersonaRaw] = useState<PersonaId>(readStoredPersona);
   const setActivePersona = useCallback((id: PersonaId) => {
     setActivePersonaRaw(id);
@@ -1183,7 +1184,7 @@ export default function App() {
         </div>
 
         {/* Sidebar + Content row */}
-        <div style={{ flex: 1, display: 'flex', gap: 16, overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', gap: isSidebarCollapsed ? 0 : 16, overflow: 'hidden' }}>
           <Sidebar
             onLogout={handleLogout}
             adminRole={adminRole}
@@ -1191,6 +1192,8 @@ export default function App() {
             onPageChange={handlePageChange}
             theme={theme}
             onThemeToggle={toggleTheme}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapsed={() => setIsSidebarCollapsed(c => !c)}
           />
           <main
             className="flex-1 overflow-auto bg-sidebar rounded-[8px] transition-all duration-200"
@@ -1201,6 +1204,18 @@ export default function App() {
                 : '0 2px 8px rgba(0,0,0,0.12)',
             }}
           >
+            {isSidebarCollapsed && (
+              <div className="flex items-center gap-3 p-4 pb-0">
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="p-2 rounded-lg border border-border bg-background shadow-sm hover:bg-accent transition-colors"
+                  title="Expand sidebar"
+                >
+                  <Menu className="h-4 w-4 text-foreground" />
+                </button>
+                <span className="text-sm font-medium text-foreground">{currentPage.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+              </div>
+            )}
             <div className="p-4 sm:p-6">
               <ErrorBoundary key={currentPage} fallbackTitle="Page Error">
                 <Suspense fallback={<PageSkeleton variant={getSkeletonVariant(currentPage)} />}>
