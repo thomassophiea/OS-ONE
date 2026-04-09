@@ -1124,7 +1124,11 @@ export default function App() {
           }}
         >
           {/* Left side — persistent brand across all themes */}
-          <img src="/branding/extreme-e.png" alt="Extreme Networks" style={{ height: 36, width: 36, objectFit: 'contain', flexShrink: 0 }} />
+          <img
+            src={theme === 'dev' ? '/branding/extreme-e.png' : '/branding/extreme-logo.png'}
+            alt="Extreme Networks"
+            style={{ height: 36, width: 36, objectFit: 'contain', flexShrink: 0 }}
+          />
           <span className="text-sm font-semibold text-foreground" style={{ flexShrink: 0, letterSpacing: '-0.01em' }}>
             <span style={{ fontWeight: 700 }}>Extreme</span>
             {' '}
