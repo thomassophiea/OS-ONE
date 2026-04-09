@@ -62,6 +62,7 @@ const Workspace = lazy(() => import('./components/Workspace').then(m => ({ defau
 const ReportCenter = lazy(() => import('./components/ReportCenter').then(m => ({ default: m.ReportCenter })));
 const HelpPage = lazy(() => import('./components/HelpPage').then(m => ({ default: m.HelpPage })));
 const PerformanceAnalytics = lazy(() => import('./components/PerformanceAnalytics').then(m => ({ default: m.PerformanceAnalytics })));
+const ConfigurationDrift = lazy(() => import('./components/ConfigurationDrift').then(m => ({ default: m.ConfigurationDrift })));
 import { apiService, ApiCallLog } from './services/api';
 // reportConfigPersistence imported by SharedReportViewer directly
 import { AppContextProvider } from './contexts/AppContext';
@@ -120,6 +121,7 @@ const pageInfo = {
   'configure-advanced': { title: 'Advanced Configuration', description: 'Topologies, QoS, AP Profiles, IoT, Mesh, Access Control, and Location Services' },
   'global-templates': { title: 'Global Templates', description: 'Manage configuration templates with variable substitution' },
   'global-variables': { title: 'Global Variables', description: 'Define and manage variables for template resolution' },
+  'configuration-drift': { title: 'Configuration Drift', description: 'Compare global template baseline against per-site running configuration' },
   'site-group-settings': { title: 'Site Group Settings', description: 'Configure site group connection, variables, and deployment preferences' },
   'help': { title: 'Help & Support', description: 'Get assistance with the EDGE platform using AI' },
 };
@@ -985,6 +987,8 @@ export default function App() {
         return <GlobalElementsPage initialTab="templates" initialElementType={pendingTemplateType ?? undefined} onConsumeElementType={() => setPendingTemplateType(null)} />;
       case 'global-variables':
         return <GlobalElementsPage initialTab="variables" />;
+      case 'configuration-drift':
+        return <ConfigurationDrift />;
       case 'site-group-settings':
         return <SiteGroupSettingsPage />;
       case 'configure-sites-groups':

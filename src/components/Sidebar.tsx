@@ -39,6 +39,7 @@ import {
   Globe,
   Cpu,
   Radio,
+  GitCompare,
 } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import extremeNetworksLogo from 'figma:asset/cc372b1d703a0b056a9f8c590da6c8e1cb4947fd.png';
@@ -89,6 +90,7 @@ const configureItems = [
 const operationsItems = [
   { id: 'event-alarm-dashboard', label: 'Events & Alarms', icon: Bell },
   { id: 'security-dashboard', label: 'Security', icon: Shield },
+  { id: 'configuration-drift', label: 'Config Drift', icon: GitCompare },
   { id: 'report-widgets', label: 'Report Widgets', icon: BarChart3 },
   { id: 'pci-report', label: 'PCI DSS Report', icon: FileCheck },
 ];
