@@ -32,6 +32,7 @@ const STORAGE_KEYS = {
 class GlobalElementsService {
   /** Check if Supabase is actually configured (not using placeholder). */
   private _isSupabaseConfigured(): boolean {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') return false;
     const url = import.meta.env.VITE_SUPABASE_URL;
     return !!url && !url.includes('placeholder');
   }
