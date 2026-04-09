@@ -5,6 +5,7 @@ import { LoginForm } from './components/LoginForm';
 import { SharedReportViewer } from './components/SharedReportViewer';
 import { Sidebar } from './components/Sidebar';
 import { DemoBanner } from './components/DemoBanner';
+import { bootstrapDemo, isDemoActive } from './lib/demoSeed';
 import { MobileApp } from './components/mobile/MobileApp';
 import { DetailSlideOut } from './components/DetailSlideOut';
 import { PlaceholderPage } from './components/PlaceholderPage';
@@ -134,7 +135,13 @@ interface DetailPanelState {
 }
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (import.meta.env.VITE_DEMO_MODE === 'true') {
+      if (!isDemoActive()) bootstrapDemo();
+      return true;
+    }
+    return false;
+  });
   const [currentPage, setCurrentPage] = useState('sle-dashboard');
   const [navigationScope, setNavigationScope] = useState<NavigationScope>('global');
   const [adminRole, setAdminRole] = useState<string | null>(null);
@@ -241,6 +248,13 @@ export default function App() {
 
     // Check if user is already authenticated - trust stored tokens
     const initializeAuth = async () => {
+      // Demo mode: state is already true from useState init; just set display fields
+      if (import.meta.env.VITE_DEMO_MODE === 'true') {
+        setAdminRole('READ_WRITE_GUEST_MGMT');
+        setSiteName('Meridian Retail Group');
+        return;
+      }
+
       if (apiService.isAuthenticated()) {
         console.log('[App] ✅ Found valid session - restoring authentication');
         setIsAuthenticated(true);
@@ -262,29 +276,6 @@ export default function App() {
         // Start SLE data collection automatically on successful authentication
         console.log('[App] Starting SLE data collection service');
         sleDataCollectionService.startCollection();
-      } else {
-        // Demo mode: auto-login to the lab controller
-        console.log('[App] No valid session found - attempting demo auto-login');
-        try {
-          apiService.setBaseUrl('https://tsophiea.ddns.net');
-          await apiService.login('ReadOnly', 'ReadOnly');
-          console.log('[App] ✅ Demo auto-login successful');
-          setIsAuthenticated(true);
-          setAdminRole(apiService.getAdminRole());
-          try {
-            const sites = await apiService.getSites();
-            if (sites && sites.length > 0) {
-              const firstSite = sites[0];
-              setSiteName(firstSite.displayName || firstSite.name || firstSite.siteName || 'Site');
-            }
-          } catch {
-            setSiteName('Demo Site');
-          }
-          sleDataCollectionService.startCollection();
-        } catch (error) {
-          console.warn('[App] Demo auto-login failed, showing login screen:', error);
-          setIsAuthenticated(false);
-        }
       }
     };
 

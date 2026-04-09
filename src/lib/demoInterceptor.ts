@@ -165,8 +165,8 @@ interface Route {
 }
 
 const ROUTES: Route[] = [
-  // Auth
-  { method: 'POST',  pattern: /\/authentication\/token|\/auth\/token|\/login/,  handler: handleAuth },
+  // Auth — covers Campus Controller OAuth2 token + legacy patterns
+  { method: 'POST',  pattern: /\/oauth2\/token|\/oauth2\/refreshToken|\/authentication\/token|\/auth\/token|\/login/,  handler: handleAuth },
   // HEAD connection test
   { method: 'HEAD',  pattern: /\/aps/,                                           handler: () => new Response(null, { status: 200 }) },
   // Sites
