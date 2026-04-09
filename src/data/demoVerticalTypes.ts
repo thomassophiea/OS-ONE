@@ -1,4 +1,7 @@
 import type { VerticalKey } from './benchmarkData';
+import type { VariableType, VariableScope } from '@/types/siteVariables';
+import type { GlobalElementType } from '@/types/globalElements';
+import type { AccountingType, CalledStationIdFormat } from '@/types/network';
 
 export type { VerticalKey };
 
@@ -37,7 +40,7 @@ export interface DemoSiteConfig {
   apCount: number;
   ipPrefix: string;
   location: string;
-  status: 'active';
+  status: string;
   created_at: string;
 }
 
@@ -59,15 +62,7 @@ export interface DemoTemplate {
   org_id: string;
   name: string;
   description: string;
-  element_type:
-    | 'service'
-    | 'topology'
-    | 'role'
-    | 'aaa_policy'
-    | 'cos_profile'
-    | 'rate_limiter'
-    | 'ap_profile'
-    | 'rf_policy';
+  element_type: GlobalElementType;
   config_payload: Record<string, unknown>;
   version: number;
   is_active: boolean;
@@ -83,7 +78,7 @@ export interface DemoVariable {
   name: string;
   token: string;
   description: string;
-  type: 'string' | 'number' | 'boolean' | 'vlan' | 'select';
+  type: VariableType;
   default_value: string;
   validation_rules?: {
     pattern?: string;
@@ -108,7 +103,7 @@ export interface DemoVariableValues {
 
 export interface DemoTemplateAssignment {
   template_id: string;
-  scope: 'org' | 'site_group' | 'site';
+  scope: VariableScope;
   scope_id: string;
 }
 
@@ -117,7 +112,6 @@ export interface DemoService {
   serviceName: string;
   ssid: string;
   enabled: boolean;
-  status: 'Enabled' | 'Disabled';
   description: string;
   band: 'all' | '2.4' | '5' | '6' | 'dual';
   vlan: number;
@@ -203,8 +197,8 @@ export interface DemoAAAPolicy {
   authenticationProtocol: 'PAP' | 'CHAP' | 'MS-CHAP' | 'MS-CHAP2';
   nasIpAddress: string;
   nasId: string;
-  calledStationId: string;
-  accountingType: string;
+  calledStationId: CalledStationIdFormat;
+  accountingType: AccountingType;
   accountingInterimInterval: number;
   radiusAuthServersMode: 'Failover' | 'Load-Balance' | 'Broadcast';
   radiusAcctServersMode: 'Failover' | 'Load-Balance' | 'Broadcast';
