@@ -158,5 +158,12 @@ window.addEventListener('vite:preloadError', () => {
 // Log version info on startup
 console.log(`[App] Version: ${getAppVersion()} (cache: ${getCacheVersion()})`);
 
+// Install demo interceptor before app boots — intercepts all controller API calls
+if (import.meta.env.VITE_DEMO_MODE === 'true') {
+  import('./lib/demoInterceptor').then(({ installDemoInterceptor }) => {
+    installDemoInterceptor();
+  });
+}
+
 // Start the app
 initApp();
