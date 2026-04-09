@@ -158,13 +158,10 @@ window.addEventListener('vite:preloadError', () => {
 // Log version info on startup
 console.log(`[App] Version: ${getAppVersion()} (cache: ${getCacheVersion()})`);
 
-// Install demo interceptor synchronously before app boots so no API call
-// escapes to the real server. Must await before initApp() renders anything.
+// Demo deployment: always install interceptor before app boots
 async function bootApp() {
-  if (import.meta.env.VITE_DEMO_MODE === 'true') {
-    const { installDemoInterceptor } = await import('./lib/demoInterceptor');
-    installDemoInterceptor();
-  }
+  const { installDemoInterceptor } = await import('./lib/demoInterceptor');
+  installDemoInterceptor();
   await initApp();
 }
 

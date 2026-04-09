@@ -136,11 +136,8 @@ interface DetailPanelState {
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (import.meta.env.VITE_DEMO_MODE === 'true') {
-      if (!isDemoActive()) bootstrapDemo();
-      return true;
-    }
-    return false;
+    if (!isDemoActive()) bootstrapDemo();
+    return true;
   });
   const [currentPage, setCurrentPage] = useState('sle-dashboard');
   const [navigationScope, setNavigationScope] = useState<NavigationScope>('global');
@@ -248,13 +245,12 @@ export default function App() {
 
     // Check if user is already authenticated - trust stored tokens
     const initializeAuth = async () => {
-      // Demo mode: state is already true from useState init; just set display fields
-      if (import.meta.env.VITE_DEMO_MODE === 'true') {
-        setAdminRole('READ_WRITE_GUEST_MGMT');
-        setSiteName('Meridian Retail Group');
-        return;
-      }
+      // Demo deployment: always set display fields and return
+      setAdminRole('READ_WRITE_GUEST_MGMT');
+      setSiteName('Meridian Retail Group');
+      return;
 
+      // eslint-disable-next-line no-unreachable
       if (apiService.isAuthenticated()) {
         console.log('[App] ✅ Found valid session - restoring authentication');
         setIsAuthenticated(true);
@@ -322,10 +318,8 @@ export default function App() {
       });
     };
 
-    // Set up API service session expiration handler (no-op in demo mode)
-    if (import.meta.env.VITE_DEMO_MODE !== 'true') {
-      apiService.setSessionExpiredHandler(handleSessionExpired);
-    }
+    // Demo deployment: session expiry handler disabled
+    // apiService.setSessionExpiredHandler(handleSessionExpired);
 
     // Cancel requests when page becomes hidden (user switches tabs/minimizes)
     const handleVisibilityChange = () => {
