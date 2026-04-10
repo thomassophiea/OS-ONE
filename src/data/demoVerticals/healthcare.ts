@@ -214,10 +214,10 @@ export const HEALTHCARE_VERTICAL = {
   sites: HEALTHCARE_SITES,
 
   apModelPools: {
-    'hospital':       ['AP7662', 'AP7662', 'AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    'clinic':         ['AP7532', 'AP7532', 'AP7632', 'AP7502'],
-    'imaging-center': ['AP7632', 'AP7632', 'AP7532', 'AP7532'],
-    'admin':          ['AP7532', 'AP7532', 'AP7632', 'AP7532e'],
+    'hospital':       ['AP5020', 'AP5020', 'AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    'clinic':         ['AP5010', 'AP5010', 'AP4020', 'AP3000X'],
+    'imaging-center': ['AP4020', 'AP4020', 'AP5010', 'AP5010'],
+    'admin':          ['AP5010', 'AP5010', 'AP4020', 'AP4000'],
   },
 
   hostnamePrefix: 'SMH',

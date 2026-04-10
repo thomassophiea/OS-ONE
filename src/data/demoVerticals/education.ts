@@ -208,13 +208,13 @@ export const EDUCATION_VERTICAL = {
   sites: EDUCATION_SITES,
 
   apModelPools: {
-    'lecture-hall': ['AP7662', 'AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    'library':      ['AP7532', 'AP7532', 'AP7632', 'AP7532e'],
-    'dormitory':    ['AP7502', 'AP7502', 'AP7502', 'AP7532'],
-    'research-lab': ['AP7632', 'AP7632', 'AP7532', 'AP7532e'],
-    'admin':        ['AP7532', 'AP7502', 'AP7502'],
-    'hospital-edu': ['AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    'branch-edu':   ['AP7532', 'AP7502', 'AP7502'],
+    'lecture-hall': ['AP5020', 'AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    'library':      ['AP5010', 'AP5010', 'AP4020', 'AP4000'],
+    'dormitory':    ['AP3000X', 'AP3000X', 'AP3000X', 'AP5010'],
+    'research-lab': ['AP4020', 'AP4020', 'AP5010', 'AP4000'],
+    'admin':        ['AP5010', 'AP3000X', 'AP3000X'],
+    'hospital-edu': ['AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    'branch-edu':   ['AP5010', 'AP3000X', 'AP3000X'],
   },
 
   hostnamePrefix: 'MSU',

@@ -211,10 +211,10 @@ export const ENTERPRISE_VERTICAL = {
   sites: ENTERPRISE_SITES,
 
   apModelPools: {
-    'trading-floor': ['AP7662', 'AP7662', 'AP7662', 'AP7632', 'AP7632'],
-    'office':        ['AP7532', 'AP7532', 'AP7632', 'AP7632', 'AP7532e'],
-    'branch':        ['AP7532', 'AP7502', 'AP7502', 'AP7532'],
-    'datacenter':    ['AP7632e', 'AP7632e', 'AP7632', 'AP7662e'],
+    'trading-floor': ['AP5020', 'AP5020', 'AP5020', 'AP4020', 'AP4020'],
+    'office':        ['AP5010', 'AP5010', 'AP4020', 'AP4020', 'AP4000'],
+    'branch':        ['AP5010', 'AP3000X', 'AP3000X', 'AP5010'],
+    'datacenter':    ['AP4060', 'AP4060', 'AP4020', 'AP4060'],
   },
 
   hostnamePrefix: 'APX',

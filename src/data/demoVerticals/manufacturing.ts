@@ -201,11 +201,11 @@ export const MANUFACTURING_VERTICAL = {
   sites: MANUFACTURING_SITES,
 
   apModelPools: {
-    'assembly-floor':  ['AP7632e', 'AP7632e', 'AP7632e', 'AP7632', 'AP7662e'],
-    'quality-lab':     ['AP7632', 'AP7632', 'AP7532', 'AP7532e'],
-    'warehouse':       ['AP7632e', 'AP7632e', 'AP7632', 'AP7662e'],
-    'corporate-office':['AP7532', 'AP7532', 'AP7632', 'AP7532e'],
-    'rd-lab':          ['AP7632', 'AP7632', 'AP7532', 'AP7662'],
+    'assembly-floor':  ['AP4060', 'AP4060', 'AP4060', 'AP4020', 'AP4060'],
+    'quality-lab':     ['AP4020', 'AP4020', 'AP5010', 'AP4000'],
+    'warehouse':       ['AP4060', 'AP4060', 'AP4020', 'AP4060'],
+    'corporate-office':['AP5010', 'AP5010', 'AP4020', 'AP4000'],
+    'rd-lab':          ['AP4020', 'AP4020', 'AP5010', 'AP5020'],
   },
 
   hostnamePrefix: 'TMG',

@@ -203,11 +203,11 @@ export const LOGISTICS_VERTICAL = {
   sites: LOGISTICS_SITES,
 
   apModelPools: {
-    'distribution-center': ['AP7632e', 'AP7632e', 'AP7632e', 'AP7632', 'AP7662e'],
-    'sorting-facility':    ['AP7632e', 'AP7632e', 'AP7632', 'AP7632'],
-    'cross-dock':          ['AP7632e', 'AP7632', 'AP7632', 'AP7662e'],
-    'truck-terminal':      ['AP7532', 'AP7532', 'AP7632', 'AP7502'],
-    'office':              ['AP7532', 'AP7532', 'AP7632', 'AP7532e'],
+    'distribution-center': ['AP4060', 'AP4060', 'AP4060', 'AP4020', 'AP4060'],
+    'sorting-facility':    ['AP4060', 'AP4060', 'AP4020', 'AP4020'],
+    'cross-dock':          ['AP4060', 'AP4020', 'AP4020', 'AP4060'],
+    'truck-terminal':      ['AP4060', 'AP4060', 'AP4060', 'AP4000'],
+    'office':              ['AP5010', 'AP5010', 'AP4020', 'AP4000'],
   },
 
   hostnamePrefix: 'GTN',

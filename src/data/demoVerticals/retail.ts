@@ -304,12 +304,12 @@ export const RETAIL_VERTICAL: VerticalDemoProfile = {
   sites: RETAIL_SITES,
 
   apModelPools: {
-    flagship:  ['AP7662', 'AP7662', 'AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    standard:  ['AP7532', 'AP7532', 'AP7532', 'AP7632', 'AP7532e'],
-    outlet:    ['AP7532', 'AP7532', 'AP7502', 'AP7502', 'AP7532'],
-    hq:        ['AP7662', 'AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    dc:        ['AP7632e', 'AP7632e', 'AP7632', 'AP7632', 'AP7662e'],
-    warehouse: ['AP7632e', 'AP7632e', 'AP7632', 'AP7502', 'AP7632e'],
+    flagship:  ['AP5020', 'AP5020', 'AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    standard:  ['AP5010', 'AP5010', 'AP5010', 'AP4020', 'AP4000'],
+    outlet:    ['AP5010', 'AP5010', 'AP3000X', 'AP3000X', 'AP5010'],
+    hq:        ['AP5020', 'AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    dc:        ['AP4060', 'AP4060', 'AP4020', 'AP4020', 'AP4060'],
+    warehouse: ['AP4060', 'AP4060', 'AP4020', 'AP3000X', 'AP4060'],
   },
 
   hostnamePrefix: 'MRD',

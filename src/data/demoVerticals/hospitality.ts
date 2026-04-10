@@ -206,10 +206,10 @@ export const HOSPITALITY_VERTICAL = {
   sites: HOSPITALITY_SITES,
 
   apModelPools: {
-    'hotel-full':       ['AP7662', 'AP7662', 'AP7632', 'AP7632', 'AP7532'],
-    'hotel-boutique':   ['AP7532', 'AP7532', 'AP7632', 'AP7502'],
-    'conference-center':['AP7662', 'AP7662', 'AP7662', 'AP7632', 'AP7632'],
-    'restaurant':       ['AP7532', 'AP7502', 'AP7502'],
+    'hotel-full':       ['AP5020', 'AP5020', 'AP4020', 'AP4020', 'AP5010'],
+    'hotel-boutique':   ['AP5010', 'AP5010', 'AP4020', 'AP3000X'],
+    'conference-center':['AP5020', 'AP5020', 'AP5020', 'AP4020', 'AP4020'],
+    'restaurant':       ['AP5010', 'AP3000X', 'AP3000X'],
   },
 
   hostnamePrefix: 'PHL',

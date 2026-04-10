@@ -204,11 +204,11 @@ export const GOVERNMENT_VERTICAL = {
   sites: GOVERNMENT_SITES,
 
   apModelPools: {
-    'city-hall': ['AP7532', 'AP7532', 'AP7632', 'AP7532e'],
-    'courthouse':['AP7532', 'AP7532', 'AP7632', 'AP7532'],
-    'dmv':       ['AP7532', 'AP7532', 'AP7632', 'AP7502'],
-    'library':   ['AP7532', 'AP7502', 'AP7502', 'AP7532'],
-    'transit':   ['AP7532', 'AP7502', 'AP7662', 'AP7632'],
+    'city-hall': ['AP5010', 'AP5010', 'AP4020', 'AP4000'],
+    'courthouse':['AP5010', 'AP5010', 'AP4020', 'AP5010'],
+    'dmv':       ['AP5010', 'AP5010', 'AP4020', 'AP3000X'],
+    'library':   ['AP5010', 'AP3000X', 'AP3000X', 'AP5010'],
+    'transit':   ['AP5050U', 'AP5050U', 'AP5050D', 'AP4060'],
   },
 
   hostnamePrefix: 'CNA',
