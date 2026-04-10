@@ -356,7 +356,7 @@ export function getStationsForAP(ap: MockAP): object[] {
     : siteType === 'hq' ? HQ_HOSTNAMES : RETAIL_HOSTNAMES;
 
   const rnd = makePRNG(`sta-${ap.serialNumber}`);
-  const stations = [];
+  const stations: object[] = [];
 
   for (let i = 0; i < ap.clientCount; i++) {
     const templateName = pick(rnd, pool);
@@ -486,7 +486,7 @@ export function getEvents(siteGroupId?: string): object[] {
     : DEMO_SITES;
   const aps = siteGroupId ? getAPsForSiteGroup(siteGroupId) : getAllAPs();
 
-  const events = [];
+  const events: object[] = [];
   const now = Date.now();
 
   for (let i = 0; i < 60; i++) {
@@ -770,3 +770,718 @@ export const DEMO_TEMPLATE_ASSIGNMENTS = DEMO_TEMPLATES.map(t => ({
   is_active: true,
   created_at: t.created_at,
 }));
+
+// ── Administrators ────────────────────────────────────────────────────────────
+
+export function getAdministrators(): object[] {
+  return [
+    { id: 'admin-001', userId: 'jmorales', email: 'j.morales@meridian.com', adminRole: 'FULL', accountState: 'ENABLED', createdAt: '2023-01-15T09:00:00Z', lastLogin: new Date(Date.now() - 3600000 * 2).toISOString(), twoFactorEnabled: true },
+    { id: 'admin-002', userId: 'tstanley', email: 't.stanley@meridian.com', adminRole: 'NETWORK_ADMIN', accountState: 'ENABLED', createdAt: '2023-02-01T10:00:00Z', lastLogin: new Date(Date.now() - 3600000 * 8).toISOString(), twoFactorEnabled: true },
+    { id: 'admin-003', userId: 'rpatil', email: 'r.patil@meridian.com', adminRole: 'NETWORK_ADMIN', accountState: 'ENABLED', createdAt: '2023-02-15T10:00:00Z', lastLogin: new Date(Date.now() - 86400000).toISOString(), twoFactorEnabled: false },
+    { id: 'admin-004', userId: 'lchen', email: 'l.chen@meridian.com', adminRole: 'NETWORK_OPERATOR', accountState: 'ENABLED', createdAt: '2023-03-01T10:00:00Z', lastLogin: new Date(Date.now() - 86400000 * 2).toISOString(), twoFactorEnabled: true },
+    { id: 'admin-005', userId: 'mkumar', email: 'm.kumar@meridian.com', adminRole: 'NETWORK_OPERATOR', accountState: 'ENABLED', createdAt: '2023-04-01T10:00:00Z', lastLogin: new Date(Date.now() - 86400000 * 3).toISOString(), twoFactorEnabled: false },
+    { id: 'admin-006', userId: 'agarcia', email: 'a.garcia@meridian.com', adminRole: 'READ_ONLY', accountState: 'ENABLED', createdAt: '2023-05-01T10:00:00Z', lastLogin: new Date(Date.now() - 86400000 * 7).toISOString(), twoFactorEnabled: false },
+    { id: 'admin-007', userId: 'bwilliams', email: 'b.williams@meridian.com', adminRole: 'READ_ONLY', accountState: 'ENABLED', createdAt: '2024-01-10T10:00:00Z', lastLogin: new Date(Date.now() - 86400000 * 14).toISOString(), twoFactorEnabled: false },
+    { id: 'admin-008', userId: 'svc-monitoring', email: 'svc-monitoring@meridian.com', adminRole: 'READ_ONLY', accountState: 'ENABLED', createdAt: '2023-01-15T09:00:00Z', lastLogin: new Date(Date.now() - 3600000 * 0.5).toISOString(), twoFactorEnabled: true },
+  ];
+}
+
+// ── Certificates / Trustpoints ────────────────────────────────────────────────
+
+export function getCertificates(): object[] {
+  return [
+    {
+      id: 'tp-001',
+      name: 'Meridian Root CA',
+      type: 'ca',
+      subject: 'CN=Meridian Root CA, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Root CA, O=Meridian Retail Group, C=US',
+      serialNumber: '01',
+      notBefore: '2023-01-01T00:00:00Z',
+      notAfter: '2033-01-01T00:00:00Z',
+      status: 'valid',
+      fingerprint: 'SHA256:AB:12:CD:34:EF:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78:90:AB:CD:EF:12:34:56:78',
+      privateKeyPresent: false,
+    },
+    {
+      id: 'tp-002',
+      name: 'Meridian Intermediate CA',
+      type: 'ca',
+      subject: 'CN=Meridian Intermediate CA, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Root CA, O=Meridian Retail Group, C=US',
+      serialNumber: '02',
+      notBefore: '2023-01-15T00:00:00Z',
+      notAfter: '2028-01-15T00:00:00Z',
+      status: 'valid',
+      fingerprint: 'SHA256:BC:23:DE:45:F0:67:89:01:BC:DE:F0:23:45:67:89:01:BC:DE:F0:23:45:67:89:01:BC:DE:F0:23:45:67:89',
+      privateKeyPresent: false,
+    },
+    {
+      id: 'tp-003',
+      name: 'Campus Controller — Browser TLS',
+      type: 'browser',
+      subject: 'CN=ctrl-ne.meridian.internal, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Intermediate CA, O=Meridian Retail Group, C=US',
+      serialNumber: '1001',
+      notBefore: '2025-01-01T00:00:00Z',
+      notAfter: '2026-01-01T00:00:00Z',
+      status: 'valid',
+      fingerprint: 'SHA256:CD:34:EF:56:01:23:45:67:CD:EF:01:34:56:78:90:12:CD:EF:01:34:56:78:90:12:CD:EF:01:34:56:78:90',
+      privateKeyPresent: true,
+    },
+    {
+      id: 'tp-004',
+      name: 'RADIUS Server Certificate',
+      type: 'radius',
+      subject: 'CN=radius.meridian.internal, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Intermediate CA, O=Meridian Retail Group, C=US',
+      serialNumber: '1002',
+      notBefore: '2025-01-01T00:00:00Z',
+      notAfter: '2026-06-30T00:00:00Z',
+      status: 'valid',
+      fingerprint: 'SHA256:DE:45:F0:67:12:34:56:78:DE:F0:12:45:67:89:01:23:DE:F0:12:45:67:89:01:23:DE:F0:12:45:67:89:01',
+      privateKeyPresent: true,
+    },
+    {
+      id: 'tp-005',
+      name: 'AP EAP Certificate (Expired)',
+      type: 'radius',
+      subject: 'CN=ap-eap.meridian.internal, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Intermediate CA, O=Meridian Retail Group, C=US',
+      serialNumber: '0999',
+      notBefore: '2022-07-01T00:00:00Z',
+      notAfter: '2024-07-01T00:00:00Z',
+      status: 'expired',
+      fingerprint: 'SHA256:EF:56:01:78:23:45:67:89:EF:01:23:56:78:90:12:34:EF:01:23:56:78:90:12:34:EF:01:23:56:78:90:12',
+      privateKeyPresent: false,
+    },
+    {
+      id: 'tp-006',
+      name: 'Captive Portal Certificate',
+      type: 'browser',
+      subject: 'CN=portal.meridian.com, O=Meridian Retail Group, C=US',
+      issuer: 'CN=Meridian Intermediate CA, O=Meridian Retail Group, C=US',
+      serialNumber: '1003',
+      notBefore: '2025-03-01T00:00:00Z',
+      notAfter: new Date(Date.now() + 86400000 * 22).toISOString(),
+      status: 'expiring-soon',
+      fingerprint: 'SHA256:F0:67:12:89:34:56:78:90:F0:12:34:67:89:01:23:45:F0:12:34:67:89:01:23:45:F0:12:34:67:89:01:23',
+      privateKeyPresent: true,
+    },
+  ];
+}
+
+// ── Guest Accounts ────────────────────────────────────────────────────────────
+
+export function getGuests(): object[] {
+  const now = Date.now();
+  return [
+    { id: 'guest-001', name: 'Marcus Thompson',   email: 'mthompson@vendor.com',   company: 'Accenture', status: 'active',  createdAt: new Date(now - 86400000 * 1).toISOString(), expiresAt: new Date(now + 86400000 * 1).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:01:01', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-7X4K' },
+    { id: 'guest-002', name: 'Priya Nair',         email: 'p.nair@deloitte.com',     company: 'Deloitte',  status: 'active',  createdAt: new Date(now - 86400000 * 2).toISOString(), expiresAt: new Date(now + 86400000 * 2).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:02:02', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-9N2P' },
+    { id: 'guest-003', name: 'David Kim',          email: 'dkim@zebra.com',          company: 'Zebra Technologies', status: 'active', createdAt: new Date(now - 3600000 * 6).toISOString(), expiresAt: new Date(now + 3600000 * 18).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:03:03', site: 'Northeast Distribution Center', accessCode: 'MRDG-3Q8R' },
+    { id: 'guest-004', name: 'Sarah Okonkwo',      email: 'sokonkwo@cisco.com',      company: 'Cisco',     status: 'active',  createdAt: new Date(now - 3600000 * 3).toISOString(), expiresAt: new Date(now + 3600000 * 21).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:04:04', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-5M1T' },
+    { id: 'guest-005', name: 'Carlos Reyes',       email: 'creyes@paloalto.com',     company: 'Palo Alto Networks', status: 'expired', createdAt: new Date(now - 86400000 * 3).toISOString(), expiresAt: new Date(now - 86400000 * 1).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:05:05', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-2W6U' },
+    { id: 'guest-006', name: 'Jennifer Walsh',     email: 'jwalsh@kpmg.com',         company: 'KPMG',      status: 'active',  createdAt: new Date(now - 86400000 * 0.5).toISOString(), expiresAt: new Date(now + 86400000 * 3).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:06:06', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-8B3V' },
+    { id: 'guest-007', name: 'Ahmed Al-Hassan',    email: 'ahassan@extreme.com',     company: 'Extreme Networks', status: 'active', createdAt: new Date(now - 3600000 * 1).toISOString(), expiresAt: new Date(now + 3600000 * 23).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:07:07', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-4J9W' },
+    { id: 'guest-008', name: 'Lisa Nakamura',      email: 'l.nakamura@fujitsu.com',  company: 'Fujitsu',   status: 'active',  createdAt: new Date(now - 86400000 * 1.5).toISOString(), expiresAt: new Date(now + 3600000 * 12).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:08:08', site: 'West Coast Distribution Center', accessCode: 'MRDG-6C5X' },
+    { id: 'guest-009', name: 'Robert Martinez',    email: 'rmartinez@pwc.com',       company: 'PwC',       status: 'expired', createdAt: new Date(now - 86400000 * 5).toISOString(), expiresAt: new Date(now - 86400000 * 2).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:09:09', site: 'Atlanta Flagship — Lenox Square', accessCode: 'MRDG-1L7Y' },
+    { id: 'guest-010', name: 'Sophie Bergmann',    email: 's.bergmann@sap.com',      company: 'SAP',       status: 'active',  createdAt: new Date(now - 86400000 * 0.25).toISOString(), expiresAt: new Date(now + 86400000 * 2).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:0A:0A', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-0D8Z' },
+    { id: 'guest-011', name: 'Kevin Park',         email: 'kpark@oracle.com',        company: 'Oracle',    status: 'active',  createdAt: new Date(now - 3600000 * 4).toISOString(), expiresAt: new Date(now + 3600000 * 20).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:0B:0B', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-7E4A' },
+    { id: 'guest-012', name: 'Maria Gonzalez',     email: 'm.gonzalez@ibm.com',      company: 'IBM',       status: 'active',  createdAt: new Date(now - 86400000 * 1).toISOString(), expiresAt: new Date(now + 86400000 * 1).toISOString(), ssid: 'Meridian-Guest', vlan: 100, macAddress: '00:1A:2B:3C:0C:0C', site: 'Meridian HQ — Atlanta Campus', accessCode: 'MRDG-3F2B' },
+  ];
+}
+
+// ── Firmware Images ───────────────────────────────────────────────────────────
+
+export function getFirmwareImages(): object {
+  return {
+    'AP460C': ['AP460C-10.6.3.0-012R.img', 'AP460C-10.6.2.0-056R.img', 'AP460C-10.6.1.0-042R.img'],
+    'AP410C': ['AP410C-10.6.3.0-012R.img', 'AP410C-10.6.2.0-056R.img', 'AP410C-10.6.1.0-042R.img'],
+    'AP410i': ['AP410i-10.6.3.0-012R.img', 'AP410i-10.6.2.0-056R.img', 'AP410i-10.6.1.0-042R.img'],
+    'AP305C': ['AP305C-10.6.3.0-012R.img', 'AP305C-10.6.2.0-056R.img', 'AP305C-10.6.1.0-042R.img'],
+    'AP305CX': ['AP305CX-10.6.3.0-012R.img', 'AP305CX-10.6.2.0-056R.img'],
+    'AP302i': ['AP302i-10.6.3.0-012R.img', 'AP302i-10.6.2.0-056R.img'],
+    'AP460i': ['AP460i-10.6.3.0-012R.img', 'AP460i-10.6.2.0-056R.img'],
+  };
+}
+
+// ── License Info & Usage ──────────────────────────────────────────────────────
+
+export function getLicenseInfo(): object {
+  return {
+    licenses: [
+      {
+        type: 'ExtremeCloud IQ - Pilot',
+        status: 'active',
+        serialNumber: 'PILOT-MRD-20230115-ENT',
+        expirationDate: '2027-01-14T23:59:59Z',
+        capacity: 500,
+        usedCapacity: 353,
+        features: ['Advanced RF Management', 'AI/ML Insights', 'Network Policy', 'API Access', 'Reporting'],
+      },
+      {
+        type: 'ExtremeCloud IQ - Navigator',
+        status: 'active',
+        serialNumber: 'NAV-MRD-20230115-ENT',
+        expirationDate: '2027-01-14T23:59:59Z',
+        capacity: 500,
+        usedCapacity: 353,
+        features: ['Service Level Experience', 'Benchmark Analytics', 'Advanced Insights'],
+      },
+      {
+        type: 'Extreme Networks SpectraLink Integration',
+        status: 'active',
+        serialNumber: 'SPEC-MRD-ADN-001',
+        expirationDate: '2026-07-31T23:59:59Z',
+        capacity: 100,
+        usedCapacity: 44,
+        features: ['Location Analytics', 'Presence Detection', 'Dwell Time Analytics'],
+      },
+    ],
+    totalLicenses: 3,
+    activeLicenses: 3,
+    expiringLicenses: 1,
+    warrantyStatus: 'covered',
+    supportContract: 'ExtremeWorks Premier 24x7',
+    supportExpiry: '2027-01-14T23:59:59Z',
+  };
+}
+
+export function getLicenseUsage(): object {
+  const totalAPs = getAllAPs().length;
+  return {
+    totalDevices: totalAPs,
+    licensedDevices: totalAPs,
+    unlicensedDevices: 0,
+    utilizationPercentage: Math.round((totalAPs / 500) * 100),
+    deviceBreakdown: {
+      accessPoints: totalAPs,
+      switches: 0,
+      routers: 0,
+    },
+    pilotUsed: totalAPs,
+    pilotTotal: 500,
+    navigatorUsed: totalAPs,
+    navigatorTotal: 500,
+  };
+}
+
+// ── Config Backups ────────────────────────────────────────────────────────────
+
+export function getConfigBackups(): object[] {
+  const now = Date.now();
+  return [
+    { id: 'bkp-001', name: 'Pre-firmware-upgrade-10.6.3', type: 'manual', status: 'completed', createdAt: new Date(now - 86400000 * 2).toISOString(), size: 2847291, sizeFormatted: '2.72 MB', createdBy: 'jmorales', description: 'Backup before rolling out 10.6.3 firmware to all APs' },
+    { id: 'bkp-002', name: 'Scheduled Daily Backup',       type: 'scheduled', status: 'completed', createdAt: new Date(now - 3600000 * 6).toISOString(), size: 2851034, sizeFormatted: '2.72 MB', createdBy: 'system', description: 'Automated daily configuration backup' },
+    { id: 'bkp-003', name: 'Pre-holiday-config-push',      type: 'manual', status: 'completed', createdAt: new Date(now - 86400000 * 7).toISOString(), size: 2764891, sizeFormatted: '2.64 MB', createdBy: 'tstanley', description: 'Backup before holiday season RF config adjustments' },
+    { id: 'bkp-004', name: 'Scheduled Daily Backup',       type: 'scheduled', status: 'completed', createdAt: new Date(now - 3600000 * 30).toISOString(), size: 2849203, sizeFormatted: '2.72 MB', createdBy: 'system', description: 'Automated daily configuration backup' },
+    { id: 'bkp-005', name: 'Scheduled Daily Backup',       type: 'scheduled', status: 'completed', createdAt: new Date(now - 3600000 * 54).toISOString(), size: 2844711, sizeFormatted: '2.71 MB', createdBy: 'system', description: 'Automated daily configuration backup' },
+    { id: 'bkp-006', name: 'Post-rogue-AP-containment',    type: 'manual', status: 'completed', createdAt: new Date(now - 86400000 * 5).toISOString(), size: 2842019, sizeFormatted: '2.71 MB', createdBy: 'jmorales', description: 'Backup after security policy update for rogue AP containment' },
+    { id: 'bkp-007', name: 'Q1-2026-quarterly-snapshot',   type: 'manual', status: 'completed', createdAt: new Date(now - 86400000 * 10).toISOString(), size: 2798341, sizeFormatted: '2.67 MB', createdBy: 'jmorales', description: 'Q1 2026 quarterly configuration snapshot for compliance' },
+  ];
+}
+
+// ── Services / WLANs ──────────────────────────────────────────────────────────
+
+export function getServices(): object[] {
+  return [
+    {
+      id: 'svc-guest',
+      name: 'Meridian-Guest',
+      type: 'wlan',
+      ssid: 'Meridian-Guest',
+      enabled: true,
+      broadcast: true,
+      vlan: '100',
+      vlanId: 100,
+      security: 'WPA2-Personal',
+      encryption: 'AES',
+      band: 'dual',
+      clientCount: 0,
+      maxClients: 128,
+      rateLimit: { downstream: 25, upstream: 10 },
+      clientIsolation: true,
+      pmf: 'optional',
+      fastRoaming: false,
+      hidden: false,
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2025-11-01T08:30:00Z',
+      tags: ['retail', 'guest'],
+    },
+    {
+      id: 'svc-staff',
+      name: 'Meridian-Staff',
+      type: 'wlan',
+      ssid: 'Meridian-Staff',
+      enabled: true,
+      broadcast: false,
+      vlan: '20',
+      vlanId: 20,
+      security: 'WPA3-Enterprise',
+      encryption: 'AES-256',
+      band: 'dual',
+      clientCount: 0,
+      maxClients: 64,
+      rateLimit: null,
+      clientIsolation: false,
+      pmf: 'required',
+      fastRoaming: true,
+      hidden: true,
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2025-09-20T09:00:00Z',
+      tags: ['retail', 'staff'],
+    },
+    {
+      id: 'svc-pos',
+      name: 'Meridian-POS',
+      type: 'wlan',
+      ssid: 'Meridian-POS',
+      enabled: true,
+      broadcast: false,
+      vlan: '10',
+      vlanId: 10,
+      security: 'WPA3-Enterprise',
+      encryption: 'AES-256',
+      band: '5GHz',
+      clientCount: 0,
+      maxClients: 32,
+      rateLimit: { downstream: 50, upstream: 25 },
+      clientIsolation: false,
+      pmf: 'required',
+      fastRoaming: true,
+      hidden: true,
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2026-02-14T10:00:00Z',
+      tags: ['retail', 'pos', 'critical'],
+    },
+    {
+      id: 'svc-iot',
+      name: 'Meridian-IoT',
+      type: 'wlan',
+      ssid: 'Meridian-IoT',
+      enabled: true,
+      broadcast: false,
+      vlan: '200',
+      vlanId: 200,
+      security: 'WPA2-Enterprise',
+      encryption: 'AES',
+      band: '2.4GHz',
+      clientCount: 0,
+      maxClients: 128,
+      rateLimit: null,
+      clientIsolation: true,
+      pmf: 'optional',
+      fastRoaming: false,
+      hidden: true,
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2025-07-15T14:30:00Z',
+      tags: ['retail', 'iot', 'scanners', 'cameras'],
+    },
+    {
+      id: 'svc-corporate',
+      name: 'Meridian-Corporate',
+      type: 'wlan',
+      ssid: 'Meridian-Corporate',
+      enabled: true,
+      broadcast: false,
+      vlan: '30',
+      vlanId: 30,
+      security: 'WPA3-Enterprise',
+      encryption: 'AES-256',
+      band: 'dual',
+      clientCount: 0,
+      maxClients: 96,
+      rateLimit: null,
+      clientIsolation: false,
+      pmf: 'required',
+      fastRoaming: true,
+      hidden: true,
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2025-12-05T11:00:00Z',
+      tags: ['corporate', 'hq', 'dc'],
+    },
+  ];
+}
+
+// ── Profiles ──────────────────────────────────────────────────────────────────
+
+export function getProfiles(): object[] {
+  return [
+    {
+      id: 'prof-retail',
+      name: 'Retail-Profile',
+      description: 'Standard configuration profile for retail store APs',
+      deviceType: 'AP',
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2026-01-08T16:00:00Z',
+      apCount: 0,
+      services: ['svc-guest', 'svc-staff', 'svc-pos', 'svc-iot'],
+      rfPolicy: 'Retail-Standard-RRM',
+      version: 5,
+      isDefault: false,
+      tags: ['retail'],
+    },
+    {
+      id: 'prof-flagship',
+      name: 'Retail-Flagship-Profile',
+      description: 'High-density profile for flagship store locations with AP460C deployments',
+      deviceType: 'AP',
+      createdAt: '2024-02-15T10:00:00Z',
+      updatedAt: '2026-02-20T09:30:00Z',
+      apCount: 0,
+      services: ['svc-guest', 'svc-staff', 'svc-pos', 'svc-iot'],
+      rfPolicy: 'Retail-HighDensity-RRM',
+      version: 3,
+      isDefault: false,
+      tags: ['retail', 'flagship', 'high-density'],
+    },
+    {
+      id: 'prof-corporate',
+      name: 'Corporate-Profile',
+      description: 'Enterprise profile for HQ campus with voice/video priority and fast roaming',
+      deviceType: 'AP',
+      createdAt: '2024-01-10T12:00:00Z',
+      updatedAt: '2025-11-30T14:00:00Z',
+      apCount: 0,
+      services: ['svc-corporate', 'svc-guest', 'svc-iot'],
+      rfPolicy: 'Corporate-RRM',
+      version: 4,
+      isDefault: true,
+      tags: ['corporate', 'enterprise'],
+    },
+    {
+      id: 'prof-logistics',
+      name: 'Logistics-Profile',
+      description: 'Industrial-grade profile for distribution centers and warehouses',
+      deviceType: 'AP',
+      createdAt: '2024-03-01T10:00:00Z',
+      updatedAt: '2025-09-15T08:00:00Z',
+      apCount: 0,
+      services: ['svc-staff', 'svc-iot'],
+      rfPolicy: 'Retail-Industrial-RRM',
+      version: 2,
+      isDefault: false,
+      tags: ['logistics', 'dc', 'warehouse', 'industrial'],
+    },
+    {
+      id: 'prof-outlet',
+      name: 'Retail-Outlet-Profile',
+      description: 'Budget-conscious profile for outlet stores with reduced feature set',
+      deviceType: 'AP',
+      createdAt: '2024-04-01T10:00:00Z',
+      updatedAt: '2025-08-10T11:00:00Z',
+      apCount: 0,
+      services: ['svc-guest', 'svc-staff', 'svc-pos'],
+      rfPolicy: 'Retail-Standard-RRM',
+      version: 2,
+      isDefault: false,
+      tags: ['retail', 'outlet'],
+    },
+  ];
+}
+
+// ── Roles ─────────────────────────────────────────────────────────────────────
+
+export function getRoles(): object[] {
+  return [
+    { id: 'role-corp-employee', name: 'Corp-Employee', description: 'Full corporate network access with internet', vlan: 30, qosPolicy: 'employee-qos', enabled: true, clientCount: 0 },
+    { id: 'role-retail-staff', name: 'Retail-Staff', description: 'Store employee access — POS and staff networks', vlan: 20, qosPolicy: 'staff-qos', enabled: true, clientCount: 0 },
+    { id: 'role-guest', name: 'Guest', description: 'Internet-only guest access with rate limiting', vlan: 100, qosPolicy: 'guest-qos', enabled: true, clientCount: 0 },
+    { id: 'role-pos', name: 'POS-Terminal', description: 'Point-of-sale terminal — PCI DSS compliant VLAN', vlan: 10, qosPolicy: 'pos-qos', enabled: true, clientCount: 0 },
+    { id: 'role-iot', name: 'IoT-Device', description: 'Scanner, camera, printer — isolated VLAN 200', vlan: 200, qosPolicy: 'iot-qos', enabled: true, clientCount: 0 },
+    { id: 'role-logistics', name: 'Logistics-Device', description: 'Forklift terminals, handheld scanners in DC/Warehouse', vlan: 20, qosPolicy: 'staff-qos', enabled: true, clientCount: 0 },
+  ];
+}
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+export function getAuditLogs(): object[] {
+  const now = Date.now();
+  const entries = [
+    { action: 'UPDATE_AP_CONFIG',     resource: 'ap', detail: 'Updated TX power on NE-NYCFLAGSHIP-AP-3F-04 to 20 dBm', userId: 'jmorales', severity: 'info' },
+    { action: 'PUSH_TEMPLATE',        resource: 'template', detail: 'Applied "Retail RF Policy" v5 to Northeast Region (74 APs)', userId: 'tstanley', severity: 'info' },
+    { action: 'DELETE_GUEST',         resource: 'guest', detail: 'Deleted expired guest account: creyes@paloalto.com', userId: 'system', severity: 'info' },
+    { action: 'FIRMWARE_UPGRADE',     resource: 'firmware', detail: 'Initiated firmware upgrade to 10.6.3.0-012R on 24 APs at NYC Flagship', userId: 'jmorales', severity: 'info' },
+    { action: 'CREATE_ADMIN',         resource: 'admin', detail: 'Created administrator account: bwilliams (READ_ONLY)', userId: 'jmorales', severity: 'info' },
+    { action: 'ROGUE_CONTAINED',      resource: 'security', detail: 'Rogue AP contained: SSID "FREE-WIFI" (00:1A:2B:3C:4D:5E) near Northeast DC', userId: 'tstanley', severity: 'warning' },
+    { action: 'BACKUP_CREATED',       resource: 'backup', detail: 'Manual config backup created: Pre-firmware-upgrade-10.6.3 (2.72 MB)', userId: 'jmorales', severity: 'info' },
+    { action: 'WLAN_MODIFIED',        resource: 'service', detail: 'Updated Meridian-Guest passphrase and bandwidth limits', userId: 'lchen', severity: 'warning' },
+    { action: 'AP_ADOPTED',           resource: 'ap', detail: 'New AP adopted: NE-NYCFLAGSHIP-AP-2F-09 (AP460C, s/n MRD-NENYCFLAG-025)', userId: 'system', severity: 'info' },
+    { action: 'RADIUS_CERT_RENEWED',  resource: 'certificate', detail: 'Certificate "RADIUS Server Certificate" renewed — new expiry 2027-06-30', userId: 'jmorales', severity: 'info' },
+    { action: 'POLICY_UPDATE',        resource: 'policy', detail: 'Updated POS network rate limit: 50 Mbps downstream (was 40 Mbps)', userId: 'tstanley', severity: 'info' },
+    { action: 'CONFIG_RESTORED',      resource: 'backup', detail: 'Restored configuration from: Q1-2026-quarterly-snapshot', userId: 'jmorales', severity: 'warning' },
+    { action: 'ALARM_CLEARED',        resource: 'alarm', detail: 'AP SE-ATLFLAGSHIP-AP-1F-03 back online after PoE switch port reset', userId: 'system', severity: 'info' },
+    { action: 'GUEST_CREATED',        resource: 'guest', detail: 'Guest account created: a.garcia.vendor@sap.com — 48h access', userId: 'mkumar', severity: 'info' },
+    { action: 'AP_DEAUTH',            resource: 'station', detail: 'Deauthenticated POS-TERM-07 from Meridian-POS (suspected rogue device)', userId: 'tstanley', severity: 'warning' },
+    { action: 'FIRMWARE_UPGRADE',     resource: 'firmware', detail: 'Completed firmware upgrade 10.6.3.0-012R on 22/24 APs (2 offline)', userId: 'system', severity: 'info' },
+    { action: 'CHANNEL_CHANGE',       resource: 'ap', detail: 'RRM triggered channel change on WC-SFLAGSHIP-AP-2F-11 (149→157)', userId: 'system', severity: 'info' },
+    { action: 'VLAN_CHANGE',          resource: 'service', detail: 'VLAN ID for Meridian-IoT changed from 200 to 201 (reverted after 1h)', userId: 'rpatil', severity: 'warning' },
+    { action: 'ADMIN_LOGIN',          resource: 'admin', detail: 'Administrator jmorales logged in from 198.51.100.42', userId: 'jmorales', severity: 'info' },
+    { action: 'ADMIN_LOGOUT',         resource: 'admin', detail: 'Administrator tstanley session ended after 4h 22m', userId: 'tstanley', severity: 'info' },
+    { action: 'LICENSE_INSTALL',      resource: 'license', detail: 'License installed: Extreme Networks SpectraLink Integration (100 APs)', userId: 'jmorales', severity: 'info' },
+    { action: 'ADOPTION_RULE',        resource: 'adoption', detail: 'Updated adoption rule "SE-Region-Auto-Adopt" — added Tampa Outlet site', userId: 'lchen', severity: 'info' },
+    { action: 'PROFILE_UPDATE',       resource: 'profile', detail: 'Updated Logistics-Profile: DTIM period 1→3 for IoT device battery life', userId: 'rpatil', severity: 'info' },
+    { action: 'WIDS_ALERT',           resource: 'security', detail: 'WIDS: Deauth flood detected near WC-SANDIEGO-AP-1F-06 — mitigation applied', userId: 'system', severity: 'critical' },
+    { action: 'SYSTEM_REBOOT',        resource: 'system', detail: 'Controller planned reboot for maintenance window (02:00 UTC)', userId: 'system', severity: 'warning' },
+    { action: 'CREATE_GUEST',         resource: 'guest', detail: 'Guest account created: m.thompson@accenture.com — 24h access, HQ site', userId: 'mkumar', severity: 'info' },
+    { action: 'AP_FIRMWARE_SCHEDULE', resource: 'firmware', detail: 'Scheduled firmware upgrade for SE Region: 2026-04-12 02:00 local', userId: 'tstanley', severity: 'info' },
+    { action: 'DELETE_ADMIN',         resource: 'admin', detail: 'Removed administrator account: former.employee (READ_ONLY)', userId: 'jmorales', severity: 'warning' },
+    { action: 'QOS_POLICY_UPDATE',    resource: 'policy', detail: 'Updated guest-qos: downstream cap 20→25 Mbps, enabled DSCP marking', userId: 'tstanley', severity: 'info' },
+    { action: 'TEMPLATE_SYNC',        resource: 'template', detail: 'Synced Global Elements templates to 22 sites — 0 conflicts', userId: 'system', severity: 'info' },
+  ];
+
+  return entries.map((e, i) => ({
+    id: `audit-${String(i + 1).padStart(4, '0')}`,
+    ...e,
+    timestamp: new Date(now - i * 3600000 * 1.5).toISOString(),
+    ipAddress: '198.51.100.' + (40 + (i % 20)),
+    success: e.severity !== 'critical' || i > 3,
+    category: e.resource,
+  })).reverse();
+}
+
+// ── QoS Statistics ────────────────────────────────────────────────────────────
+
+export function getQoSStatistics(): object {
+  const sgId = 'sg-northeast';
+  const aps = getAPsForSiteGroup(sgId);
+  const totalClients = aps.reduce((a: number, ap: { clientCount: number }) => a + ap.clientCount, 0);
+  return {
+    totalClients,
+    voiceClients: Math.round(totalClients * 0.05),
+    videoClients: Math.round(totalClients * 0.12),
+    bestEffortClients: Math.round(totalClients * 0.67),
+    backgroundClients: Math.round(totalClients * 0.16),
+    voiceBandwidth: '2.4 Mbps',
+    videoBandwidth: '18.7 Mbps',
+    bestEffortBandwidth: '312.1 Mbps',
+    backgroundBandwidth: '28.4 Mbps',
+    totalBandwidth: '361.6 Mbps',
+    policyApplied: 'Retail-QoS-Policy',
+    dscpMappings: [
+      { dscp: 46, description: 'Expedited Forwarding — VoIP', trafficClass: 'voice' },
+      { dscp: 34, description: 'AF41 — Interactive Video', trafficClass: 'video' },
+      { dscp: 0,  description: 'Best Effort', trafficClass: 'best-effort' },
+      { dscp: 10, description: 'AF11 — Background', trafficClass: 'background' },
+    ],
+  };
+}
+
+// ── Applications (AppsManager) ────────────────────────────────────────────────
+
+export function getInstalledApplications(): object[] {
+  return [
+    { id: 'app-airdefense', name: 'AirDefense', version: '10.6.3.1', status: 'running', description: 'Wireless intrusion prevention and rogue AP containment', vendor: 'Extreme Networks', installedAt: '2024-03-01T10:00:00Z', port: 8443, memoryUsageMB: 512, cpuPercent: 3.2, containerName: 'airdefense-svc' },
+    { id: 'app-analytics', name: 'ExtremeAnalytics', version: '22.4.2', status: 'running', description: 'Application visibility and deep packet inspection analytics', vendor: 'Extreme Networks', installedAt: '2024-03-01T10:00:00Z', port: 8444, memoryUsageMB: 1024, cpuPercent: 8.7, containerName: 'extreme-analytics' },
+    { id: 'app-location', name: 'ExtremeLocation', version: '5.1.0', status: 'running', description: 'Real-time RTLS and presence analytics', vendor: 'Extreme Networks', installedAt: '2024-06-15T10:00:00Z', port: 8445, memoryUsageMB: 768, cpuPercent: 4.1, containerName: 'extreme-location' },
+    { id: 'app-eguest', name: 'ExtremeGuest', version: '9.1.4', status: 'running', description: 'Captive portal, guest self-registration and social login', vendor: 'Extreme Networks', installedAt: '2024-01-10T12:00:00Z', port: 8080, memoryUsageMB: 384, cpuPercent: 1.8, containerName: 'extreme-guest' },
+    { id: 'app-report', name: 'ExtremeReports', version: '6.2.1', status: 'stopped', description: 'Scheduled compliance and executive reporting engine', vendor: 'Extreme Networks', installedAt: '2024-09-01T10:00:00Z', port: null, memoryUsageMB: 0, cpuPercent: 0, containerName: 'extreme-reports' },
+  ];
+}
+
+export function getApplicationStorage(): object {
+  return {
+    total: 500 * 1024 * 1024 * 1024,
+    used: 87.3 * 1024 * 1024 * 1024,
+    free: 412.7 * 1024 * 1024 * 1024,
+    usagePercent: 17.5,
+    breakdown: [
+      { name: 'AirDefense', sizeBytes: 18.2 * 1024 * 1024 * 1024 },
+      { name: 'ExtremeAnalytics', sizeBytes: 42.1 * 1024 * 1024 * 1024 },
+      { name: 'ExtremeLocation', sizeBytes: 14.8 * 1024 * 1024 * 1024 },
+      { name: 'ExtremeGuest', sizeBytes: 7.3 * 1024 * 1024 * 1024 },
+      { name: 'System', sizeBytes: 4.9 * 1024 * 1024 * 1024 },
+    ],
+  };
+}
+
+// ── Network Analytics ─────────────────────────────────────────────────────────
+
+export function getInterferenceAnalytics(): object[] {
+  const sgId = 'sg-northeast';
+  const aps = getAPsForSiteGroup(sgId).slice(0, 15);
+  const rnd = makePRNG('interference');
+  return aps.map((ap: { serialNumber: string; displayName: string; site: string }) => ({
+    apSerial: ap.serialNumber,
+    apName: ap.displayName,
+    site: ap.site,
+    band: '5GHz',
+    interferenceLevel: rndInt(rnd, 5, 42),
+    noiseFloor: rndInt(rnd, -95, -82),
+    channelUtilization: rndInt(rnd, 12, 74),
+    coChannelInterference: rndInt(rnd, 2, 28),
+    adjacentChannelInterference: rndInt(rnd, 1, 15),
+  }));
+}
+
+export function getCoverageAnalytics(): object[] {
+  const sgId = 'sg-northeast';
+  const sites = DEMO_SITES.filter(s => s.site_group_id === sgId);
+  return sites.map(site => {
+    const rnd = makePRNG(`coverage-${site.id}`);
+    return {
+      siteId: site.id,
+      siteName: site.name,
+      coverageScore: rndInt(rnd, 78, 98),
+      deadZones: rndInt(rnd, 0, 3),
+      avgRSSI: rndInt(rnd, -68, -52),
+      clientsAboveMinus67: rndInt(rnd, 80, 99),
+      apCount: site.apCount,
+    };
+  });
+}
+
+export function getRoamingAnalytics(): object[] {
+  const sgId = 'sg-northeast';
+  const sites = DEMO_SITES.filter(s => s.site_group_id === sgId);
+  return sites.map(site => {
+    const rnd = makePRNG(`roaming-${site.id}`);
+    return {
+      siteId: site.id,
+      siteName: site.name,
+      totalRoamingEvents: rndInt(rnd, 120, 2400),
+      fastBSSTransition: rndInt(rnd, 65, 94),
+      opportunisticKeyCache: rndInt(rnd, 72, 96),
+      avgRoamTime: rndInt(rnd, 40, 180),
+      successRate: rndInt(rnd, 88, 99),
+    };
+  });
+}
+
+// ── Adoption Rules ────────────────────────────────────────────────────────────
+
+export function getAdoptionRules(): object[] {
+  return [
+    {
+      id: 'rule-ne-auto',
+      name: 'NE-Region-Auto-Adopt',
+      description: 'Auto-adopt APs in the 10.10.x.x subnet to the Northeast Region site group',
+      status: 'active',
+      priority: 1,
+      conditions: [
+        { field: 'ipAddress', operator: 'startsWith', value: '10.10.' },
+        { field: 'model', operator: 'in', value: 'AP460C,AP410C,AP305C,AP305CX' },
+      ],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-northeast' },
+        { type: 'assignProfile',   value: 'Retail-Profile' },
+      ],
+      apCount: 74,
+      createdAt: '2023-02-01T10:00:00Z',
+      updatedAt: '2025-10-15T09:00:00Z',
+      createdBy: 'jmorales',
+    },
+    {
+      id: 'rule-se-auto',
+      name: 'SE-Region-Auto-Adopt',
+      description: 'Auto-adopt APs in the 10.20.x.x subnet to the Southeast Region site group',
+      status: 'active',
+      priority: 2,
+      conditions: [
+        { field: 'ipAddress', operator: 'startsWith', value: '10.20.' },
+      ],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-southeast' },
+        { type: 'assignProfile',   value: 'Retail-Profile' },
+      ],
+      apCount: 88,
+      createdAt: '2023-02-01T10:00:00Z',
+      updatedAt: '2026-01-20T11:00:00Z',
+      createdBy: 'jmorales',
+    },
+    {
+      id: 'rule-wc-auto',
+      name: 'WC-Region-Auto-Adopt',
+      description: 'Auto-adopt APs in the 10.30.x.x subnet to the West Coast Region site group',
+      status: 'active',
+      priority: 3,
+      conditions: [
+        { field: 'ipAddress', operator: 'startsWith', value: '10.30.' },
+      ],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-west' },
+        { type: 'assignProfile',   value: 'Retail-Profile' },
+      ],
+      apCount: 99,
+      createdAt: '2023-02-01T10:00:00Z',
+      updatedAt: '2026-01-20T11:00:00Z',
+      createdBy: 'jmorales',
+    },
+    {
+      id: 'rule-corp-hq',
+      name: 'Corporate-HQ-Adopt',
+      description: 'Auto-adopt HQ campus APs with AP460C/AP410C to the corporate site group',
+      status: 'active',
+      priority: 4,
+      conditions: [
+        { field: 'ipAddress', operator: 'startsWith', value: '10.40.1.' },
+        { field: 'model', operator: 'in', value: 'AP460C,AP410C' },
+      ],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-corporate' },
+        { type: 'assignProfile',   value: 'Corporate-Profile' },
+      ],
+      apCount: 48,
+      createdAt: '2023-01-15T09:00:00Z',
+      updatedAt: '2025-09-01T10:00:00Z',
+      createdBy: 'jmorales',
+    },
+    {
+      id: 'rule-dc-logistics',
+      name: 'DC-Logistics-Adopt',
+      description: 'Auto-adopt distribution center and warehouse APs to logistics profile',
+      status: 'active',
+      priority: 5,
+      conditions: [
+        { field: 'ipAddress', operator: 'startsWith', value: '10.40.' },
+        { field: 'model', operator: 'in', value: 'AP410i,AP460i' },
+      ],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-corporate' },
+        { type: 'assignProfile',   value: 'Logistics-Profile' },
+      ],
+      apCount: 164,
+      createdAt: '2023-01-15T09:00:00Z',
+      updatedAt: '2025-07-20T08:00:00Z',
+      createdBy: 'rpatil',
+    },
+    {
+      id: 'rule-default',
+      name: 'Default-Catch-All',
+      description: 'Catch-all rule: unmatched APs are placed in quarantine for manual review',
+      status: 'active',
+      priority: 99,
+      conditions: [],
+      actions: [
+        { type: 'assignSiteGroup', value: 'sg-northeast' },
+        { type: 'quarantine',      value: 'true' },
+      ],
+      apCount: 0,
+      createdAt: '2023-01-15T09:00:00Z',
+      updatedAt: '2023-01-15T09:00:00Z',
+      createdBy: 'jmorales',
+    },
+  ];
+}
+
+// ── Flash / Platform Storage ──────────────────────────────────────────────────
+
+export function getFlashFiles(): object[] {
+  return [
+    { name: 'AP460C-10.6.3.0-012R.img', size: 48291840, sizeFormatted: '46.1 MB', type: 'firmware', uploadedAt: '2026-03-15T08:00:00Z' },
+    { name: 'AP410C-10.6.3.0-012R.img', size: 44040192, sizeFormatted: '42.0 MB', type: 'firmware', uploadedAt: '2026-03-15T08:00:00Z' },
+    { name: 'AP305C-10.6.3.0-012R.img', size: 38797312, sizeFormatted: '37.0 MB', type: 'firmware', uploadedAt: '2026-03-15T08:00:00Z' },
+    { name: 'AP460C-10.6.2.0-056R.img', size: 47710208, sizeFormatted: '45.5 MB', type: 'firmware', uploadedAt: '2025-11-20T08:00:00Z' },
+    { name: 'backup-pre-firmware-10.6.3.tar.gz', size: 2847291, sizeFormatted: '2.72 MB', type: 'backup', uploadedAt: '2026-04-08T10:00:00Z' },
+    { name: 'captive-portal-branding.zip', size: 3145728, sizeFormatted: '3.0 MB', type: 'config', uploadedAt: '2025-12-01T14:30:00Z' },
+  ];
+}
+
+export function getFlashUsage(): object {
+  return {
+    totalBytes: 2 * 1024 * 1024 * 1024,
+    usedBytes: 183 * 1024 * 1024,
+    freeBytes: (2 * 1024 * 1024 * 1024) - (183 * 1024 * 1024),
+    usagePercent: 8.9,
+  };
+}

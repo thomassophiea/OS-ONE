@@ -21,6 +21,26 @@ import {
   getEvents,
   getAlarms,
   getSecurityData,
+  getAdministrators,
+  getCertificates,
+  getGuests,
+  getFirmwareImages,
+  getLicenseInfo,
+  getLicenseUsage,
+  getConfigBackups,
+  getServices,
+  getProfiles,
+  getRoles,
+  getAuditLogs,
+  getQoSStatistics,
+  getInstalledApplications,
+  getApplicationStorage,
+  getInterferenceAnalytics,
+  getCoverageAnalytics,
+  getRoamingAnalytics,
+  getAdoptionRules,
+  getFlashFiles,
+  getFlashUsage,
 } from '@/data/meridianDemoData';
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -154,6 +174,87 @@ function handleAPDetails(url: string): Response {
   return ap ? jsonResponse(ap) : jsonResponse(null, 404);
 }
 
+function handleAdministrators(): Response {
+  return jsonResponse(getAdministrators());
+}
+
+function handleCertificates(): Response {
+  return jsonResponse(getCertificates());
+}
+
+function handleGuests(): Response {
+  return jsonResponse(getGuests());
+}
+
+function handleFirmwareImages(): Response {
+  return jsonResponse(getFirmwareImages());
+}
+
+function handleLicenseInfo(): Response {
+  return jsonResponse(getLicenseInfo());
+}
+
+function handleLicenseUsage(): Response {
+  return jsonResponse(getLicenseUsage());
+}
+
+function handleConfigBackups(): Response {
+  return jsonResponse(getConfigBackups());
+}
+
+function handleServices(): Response {
+  return jsonResponse(getServices());
+}
+
+function handleProfiles(): Response {
+  return jsonResponse(getProfiles());
+}
+
+function handleRoles(): Response {
+  return jsonResponse(getRoles());
+}
+
+function handleAuditLogs(): Response {
+  return jsonResponse(getAuditLogs());
+}
+
+function handleQoSStats(): Response {
+  return jsonResponse(getQoSStatistics());
+}
+
+function handleApplications(): Response {
+  return jsonResponse(getInstalledApplications());
+}
+
+function handleAppStorage(): Response {
+  return jsonResponse(getApplicationStorage());
+}
+
+function handleInterference(): Response {
+  return jsonResponse(getInterferenceAnalytics());
+}
+
+function handleCoverageAnalytics(): Response {
+  return jsonResponse(getCoverageAnalytics());
+}
+
+function handleRoamingAnalytics(): Response {
+  return jsonResponse(getRoamingAnalytics());
+}
+
+function handleAdoptionRules(): Response {
+  return jsonResponse(getAdoptionRules());
+}
+
+function handleFlashFiles(): Response {
+  return jsonResponse(getFlashFiles());
+}
+
+function handleFlashUsage(): Response {
+  return jsonResponse(getFlashUsage());
+}
+
+
 // ── Route Table ───────────────────────────────────────────────────────────────
 
 type Handler = (url: string, init?: RequestInit) => Response;
@@ -191,6 +292,46 @@ const ROUTES: Route[] = [
   { method: null,    pattern: /\/alarms|\/alarm/,                               handler: handleAlarms },
   // Security / rogue APs
   { method: null,    pattern: /\/security|\/rogue|\/threat/,                    handler: handleSecurity },
+  // Administrators
+  { method: null, pattern: /\/v1\/administrators/, handler: handleAdministrators },
+  // Certificates / Trustpoints
+  { method: null, pattern: /\/v1\/trustpoints/, handler: handleCertificates },
+  // Guests
+  { method: null, pattern: /\/v1\/guests/, handler: handleGuests },
+  // AP firmware images
+  { method: null, pattern: /\/v1\/aps\/upgradeimagelist/, handler: handleFirmwareImages },
+  // License
+  { method: null, pattern: /\/platformmanager\/v1\/license\/info/, handler: handleLicenseInfo },
+  { method: null, pattern: /\/platformmanager\/v1\/license\/usage/, handler: handleLicenseUsage },
+  { method: null, pattern: /\/platformmanager\/v1\/license/, handler: handleLicenseInfo },
+  // Config backups
+  { method: null, pattern: /\/platformmanager\/v1\/configuration\/backup/, handler: handleConfigBackups },
+  // Services / WLANs
+  { method: null, pattern: /\/v1\/services/, handler: handleServices },
+  // Profiles
+  { method: null, pattern: /\/(v3|v1)\/profiles|\/v3\/approfiles|\/v3\/networkprofiles/, handler: handleProfiles },
+  // Roles
+  { method: null, pattern: /\/(v3|v1)\/roles/, handler: handleRoles },
+  // Audit logs
+  { method: null, pattern: /\/v1\/auditlogs/, handler: handleAuditLogs },
+  // QoS
+  { method: null, pattern: /\/v1\/qos/, handler: handleQoSStats },
+  // Apps manager — storage first (more specific)
+  { method: null, pattern: /\/appsmanager\/v1\/storage/, handler: handleAppStorage },
+  { method: null, pattern: /\/appsmanager\/v1\/images/, handler: handleApplications },
+  { method: null, pattern: /\/appsmanager\/v1\/containers/, handler: handleApplications },
+  { method: null, pattern: /\/appsmanager\/v1\/applications/, handler: handleApplications },
+  // Analytics
+  { method: null, pattern: /\/v1\/analytics\/wireless\/interference/, handler: handleInterference },
+  { method: null, pattern: /\/v1\/analytics\/wireless\/coverage/, handler: handleCoverageAnalytics },
+  { method: null, pattern: /\/v1\/analytics\/clients\/roaming/, handler: handleRoamingAnalytics },
+  // Adoption rules
+  { method: null, pattern: /\/v1\/adoption|\/v1\/devices\/adoption/, handler: handleAdoptionRules },
+  // Flash storage
+  { method: null, pattern: /\/platformmanager\/v1\/flash\/files/, handler: handleFlashFiles },
+  { method: null, pattern: /\/platformmanager\/v1\/flash\/usage/, handler: handleFlashUsage },
+  // Network diagnostics — return canned success
+  { method: null, pattern: /\/platformmanager\/v1\/network\/(ping|traceroute|dns)/, handler: () => jsonResponse({ success: true, result: 'PING ctrl-ne.meridian.internal: 4 packets transmitted, 4 received, 0% packet loss, time 3ms' }) },
 ];
 
 // ── Interceptor Install / Uninstall ───────────────────────────────────────────

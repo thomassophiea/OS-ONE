@@ -104,8 +104,8 @@ export const GLOBAL_TEMPLATE_CONFIG: SiteNetworkConfig = {
     beacon_interval: 100,
   },
   wlan: {
-    ssid_primary: 'CORP-WIRELESS',
-    ssid_guest: 'CORP-GUEST',
+    ssid_primary: 'Meridian-Staff',
+    ssid_guest: 'Meridian-Guest',
     vlan_primary: 10,
     vlan_guest: 100,
     security_type: 'WPA3-Enterprise',
@@ -127,8 +127,8 @@ export const GLOBAL_TEMPLATE_CONFIG: SiteNetworkConfig = {
 
 export const INITIAL_SITE_CONFIGS: SiteConfig[] = [
   {
-    id: 'east-campus',
-    name: 'East Campus',
+    id: 'ne-nyc-flagship',
+    name: 'NYC Flagship — 5th Ave',
     config: {
       rf: { ...GLOBAL_TEMPLATE_CONFIG.rf },
       wlan: { ...GLOBAL_TEMPLATE_CONFIG.wlan },
@@ -137,8 +137,8 @@ export const INITIAL_SITE_CONFIGS: SiteConfig[] = [
     drift_notes: {},
   },
   {
-    id: 'west-campus',
-    name: 'West Campus',
+    id: 'se-atl-flagship',
+    name: 'Atlanta Flagship — Lenox Square',
     config: {
       rf: {
         ...GLOBAL_TEMPLATE_CONFIG.rf,
@@ -163,8 +163,8 @@ export const INITIAL_SITE_CONFIGS: SiteConfig[] = [
     },
   },
   {
-    id: 'stadium',
-    name: 'Stadium',
+    id: 'corp-hq',
+    name: 'Meridian HQ — Atlanta Campus',
     config: {
       rf: {
         ...GLOBAL_TEMPLATE_CONFIG.rf,
@@ -195,8 +195,8 @@ export const INITIAL_SITE_CONFIGS: SiteConfig[] = [
     },
   },
   {
-    id: 'north-campus',
-    name: 'North Campus',
+    id: 'corp-ne-dc',
+    name: 'Northeast Distribution Center',
     config: {
       rf: {
         ...GLOBAL_TEMPLATE_CONFIG.rf,
@@ -216,8 +216,8 @@ export const INITIAL_SITE_CONFIGS: SiteConfig[] = [
     },
   },
   {
-    id: 'southbrook-elementary',
-    name: 'Southbrook Elementary',
+    id: 'wc-la-flagship',
+    name: 'LA Flagship — Beverly Center',
     config: {
       rf: { ...GLOBAL_TEMPLATE_CONFIG.rf },
       wlan: { ...GLOBAL_TEMPLATE_CONFIG.wlan },
@@ -272,6 +272,6 @@ export function computeDrift(
  */
 export function getSiteStatus(drifted: DriftedParam[], siteId: string): DriftStatus {
   if (drifted.length === 0) return 'in_sync';
-  if (siteId === 'stadium' && drifted.length >= 4) return 'critical';
+  if (siteId === 'corp-hq' && drifted.length >= 4) return 'critical';
   return 'drift_detected';
 }

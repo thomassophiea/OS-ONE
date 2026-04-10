@@ -93,7 +93,11 @@ export function EventNotificationsConfig() {
         setEmailNotifications(await emailRes.json());
       } else {
         setEmailNotifications([
-          { id: '1', name: 'Critical Alerts', recipients: ['admin@example.com'], enabled: true, events: ['alarm.critical'], schedule: 'immediate' }
+          { id: '1', name: 'Critical Alerts', recipients: ['j.morales@meridian.com', 't.stanley@meridian.com'], enabled: true, events: ['alarm.critical'], schedule: 'immediate' },
+          { id: '2', name: 'AP Down Alerts', recipients: ['t.stanley@meridian.com', 'l.chen@meridian.com'], enabled: true, events: ['ap.disconnect', 'ap.error'], schedule: 'immediate' },
+          { id: '3', name: 'Firmware Upgrades', recipients: ['j.morales@meridian.com'], enabled: true, events: ['firmware.upgrade.complete', 'firmware.upgrade.failed'], schedule: 'immediate' },
+          { id: '4', name: 'Daily Summary', recipients: ['j.morales@meridian.com', 'r.patil@meridian.com', 'l.chen@meridian.com'], enabled: true, events: ['summary.daily'], schedule: 'daily' },
+          { id: '5', name: 'Security Alerts', recipients: ['j.morales@meridian.com', 't.stanley@meridian.com', 'a.garcia@meridian.com'], enabled: true, events: ['rogue.detected', 'wids.alert'], schedule: 'immediate' },
         ]);
       }
     } catch (error) {

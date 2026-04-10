@@ -145,56 +145,94 @@ export function ConfigureAdoptionRules() {
       if (!data || data.length === 0) {
         const mockRules: AdoptionRule[] = [
         {
-          id: '1',
-          name: 'Building A Access Points',
-          description: 'Automatically assign all Building A APs to the correct site',
+          id: 'rule-ne-auto',
+          name: 'NE-Region-Auto-Adopt',
+          description: 'Auto-adopt APs in the 10.10.x.x subnet to the Northeast Region site group',
           enabled: true,
           priority: 1,
           conditions: [
-            { id: 'c1', field: 'apName', operator: 'startsWith', value: 'BLDG-A-' }
+            { id: 'c1', field: 'ipSubnet' as const, operator: 'startsWith' as const, value: '10.10.' },
+            { id: 'c2', field: 'model' as const, operator: 'contains' as const, value: 'AP460C,AP410C,AP305C' },
           ],
           actions: [
-            { id: 'a1', type: 'assignSite', value: 'site-001', label: 'Building A - Main Campus' }
+            { id: 'a1', type: 'assignSite', value: 'sg-northeast', label: 'Northeast Region' },
+            { id: 'a2', type: 'assignProfile', value: 'Retail-Profile', label: 'Retail-Profile' },
           ],
-          matchCount: 24,
-          lastMatched: new Date().toISOString(),
-          createdAt: '2025-01-10T10:00:00Z',
-          modifiedAt: '2025-01-15T14:30:00Z'
+          matchCount: 74,
+          lastMatched: new Date(Date.now() - 3600000 * 2).toISOString(),
+          createdAt: '2023-02-01T10:00:00Z',
+          modifiedAt: '2025-10-15T09:00:00Z',
         },
         {
-          id: '2',
-          name: 'Guest Network Devices',
-          description: 'Assign guest VLAN to devices matching guest patterns',
+          id: 'rule-se-auto',
+          name: 'SE-Region-Auto-Adopt',
+          description: 'Auto-adopt APs in the 10.20.x.x subnet to the Southeast Region site group',
           enabled: true,
           priority: 2,
           conditions: [
-            { id: 'c2', field: 'apName', operator: 'contains', value: 'GUEST' }
+            { id: 'c3', field: 'ipSubnet' as const, operator: 'startsWith' as const, value: '10.20.' },
           ],
           actions: [
-            { id: 'a2', type: 'assignVlan', value: '100', label: 'VLAN 100 (Guest)' }
+            { id: 'a3', type: 'assignSite', value: 'sg-southeast', label: 'Southeast Region' },
+            { id: 'a4', type: 'assignProfile', value: 'Retail-Profile', label: 'Retail-Profile' },
           ],
-          matchCount: 12,
-          lastMatched: new Date().toISOString(),
-          createdAt: '2025-01-12T09:00:00Z',
-          modifiedAt: '2025-01-12T09:00:00Z'
+          matchCount: 88,
+          lastMatched: new Date(Date.now() - 3600000 * 6).toISOString(),
+          createdAt: '2023-02-01T10:00:00Z',
+          modifiedAt: '2026-01-20T11:00:00Z',
         },
         {
-          id: '3',
-          name: 'Corporate APs by MAC Range',
-          description: 'Assign corporate profile based on MAC address range',
-          enabled: false,
+          id: 'rule-corp-hq',
+          name: 'Corporate-HQ-Adopt',
+          description: 'Auto-adopt HQ campus APs with AP460C/AP410C to the corporate site group',
+          enabled: true,
           priority: 3,
           conditions: [
-            { id: 'c3', field: 'macAddress', operator: 'startsWith', value: 'AA:BB:CC' }
+            { id: 'c5', field: 'ipSubnet' as const, operator: 'startsWith' as const, value: '10.40.1.' },
+            { id: 'c6', field: 'model' as const, operator: 'contains' as const, value: 'AP460C,AP410C' },
           ],
           actions: [
-            { id: 'a3', type: 'assignProfile', value: 'corp-standard', label: 'Corporate Standard Profile' },
-            { id: 'a4', type: 'setTags', value: 'corporate,managed', label: 'Tags: corporate, managed' }
+            { id: 'a5', type: 'assignSite', value: 'sg-corporate', label: 'Corporate & Logistics' },
+            { id: 'a6', type: 'assignProfile', value: 'Corporate-Profile', label: 'Corporate-Profile' },
+          ],
+          matchCount: 48,
+          lastMatched: new Date(Date.now() - 86400000).toISOString(),
+          createdAt: '2023-01-15T09:00:00Z',
+          modifiedAt: '2025-09-01T10:00:00Z',
+        },
+        {
+          id: 'rule-dc-logistics',
+          name: 'DC-Logistics-Adopt',
+          description: 'Auto-adopt distribution center and warehouse APs to logistics profile',
+          enabled: true,
+          priority: 4,
+          conditions: [
+            { id: 'c7', field: 'ipSubnet' as const, operator: 'startsWith' as const, value: '10.40.' },
+            { id: 'c8', field: 'model' as const, operator: 'contains' as const, value: 'AP410i,AP460i' },
+          ],
+          actions: [
+            { id: 'a7', type: 'assignSite', value: 'sg-corporate', label: 'Corporate & Logistics' },
+            { id: 'a8', type: 'assignProfile', value: 'Logistics-Profile', label: 'Logistics-Profile' },
+          ],
+          matchCount: 164,
+          lastMatched: new Date(Date.now() - 3600000 * 12).toISOString(),
+          createdAt: '2023-01-15T09:00:00Z',
+          modifiedAt: '2025-07-20T08:00:00Z',
+        },
+        {
+          id: 'rule-default',
+          name: 'Default-Catch-All',
+          description: 'Catch-all: unmatched APs placed in quarantine for manual review',
+          enabled: true,
+          priority: 99,
+          conditions: [],
+          actions: [
+            { id: 'a9', type: 'assignSite', value: 'sg-northeast', label: 'Northeast Region (quarantine)' },
           ],
           matchCount: 0,
-          createdAt: '2025-01-08T16:00:00Z',
-          modifiedAt: '2025-01-14T11:20:00Z'
-        }
+          createdAt: '2023-01-15T09:00:00Z',
+          modifiedAt: '2023-01-15T09:00:00Z',
+        },
       ];
 
         setRules(mockRules);
@@ -229,9 +267,18 @@ export function ConfigureAdoptionRules() {
       console.error('Error loading sites:', error);
       // Use mock sites if API fails
       setSites([
-        { id: 'site-001', name: 'Building A - Main Campus' },
-        { id: 'site-002', name: 'Building B - Research Lab' },
-        { id: 'site-003', name: 'Building C - Admin' }
+        { id: 'ne-nyc-flagship',   name: 'NYC Flagship — 5th Ave' },
+        { id: 'ne-boston-std',     name: 'Boston — Prudential Center' },
+        { id: 'ne-philly-std',     name: 'Philadelphia — King of Prussia' },
+        { id: 'ne-newark-outlet',  name: 'Newark Outlet' },
+        { id: 'ne-hartford-std',   name: 'Hartford — Westfarms Mall' },
+        { id: 'ne-providence-std', name: 'Providence — Providence Place' },
+        { id: 'se-atl-flagship',   name: 'Atlanta Flagship — Lenox Square' },
+        { id: 'se-miami-flagship', name: 'Miami Flagship — Brickell City' },
+        { id: 'wc-la-flagship',    name: 'LA Flagship — Beverly Center' },
+        { id: 'wc-sf-flagship',    name: 'SF Flagship — Union Square' },
+        { id: 'corp-hq',           name: 'Meridian HQ — Atlanta Campus' },
+        { id: 'corp-ne-dc',        name: 'Northeast Distribution Center' },
       ]);
     }
   };
