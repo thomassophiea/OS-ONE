@@ -7,21 +7,16 @@
  * TODO: Remove this file when connecting to a real Supabase + controller.
  */
 
-import {
-  DEMO_ORG,
-  DEMO_SITE_GROUPS,
-  DEMO_TEMPLATES,
-  DEMO_VARIABLE_DEFINITIONS,
-  DEMO_VARIABLE_VALUES,
-  DEMO_TEMPLATE_ASSIGNMENTS,
-} from '@/data/meridianDemoData';
-
-const ORG_ID = 'meridian-org';
+import { getVerticalProfile } from '@/data/demoVerticals/index';
+import type { VerticalKey } from '@/data/demoVerticalTypes';
+import type { VerticalDemoProfile } from '@/data/demoVerticalTypes';
 
 /** Seed everything and mark demo mode active. */
-export function bootstrapDemo(): void {
-  seedTenant();
-  seedGlobalElements();
+export function bootstrapDemo(verticalKey: VerticalKey = 'Retail'): void {
+  const profile = getVerticalProfile(verticalKey);
+  localStorage.setItem('demo_active_vertical', verticalKey);
+  seedTenant(profile);
+  seedGlobalElements(profile);
   localStorage.setItem('demo_mode_active', 'true');
   localStorage.setItem('user_email', 'demo@meridian.com');
   localStorage.setItem('admin_role', 'READ_WRITE_GUEST_MGMT');
@@ -32,8 +27,14 @@ export function bootstrapDemo(): void {
 
 /** Remove all demo data from localStorage. */
 export function teardownDemo(): void {
+  // Determine which org was active so we can remove org-keyed GE entries
+  const activeVertical = (localStorage.getItem('demo_active_vertical') ?? 'Retail') as VerticalKey;
+  const profile = getVerticalProfile(activeVertical);
+  const orgId = profile.org.id;
+
   const keysToRemove = [
     'demo_mode_active',
+    'demo_active_vertical',
     'user_email',
     'admin_role',
     'access_token',
@@ -41,10 +42,10 @@ export function teardownDemo(): void {
     'api_current_org',
     'api_controllers',
     'api_current_controller',
-    `ge_templates:${ORG_ID}`,
-    `ge_variable_defs:${ORG_ID}`,
-    `ge_variable_vals:${ORG_ID}`,
-    `ge_template_assignments:${ORG_ID}`,
+    `ge_templates:${orgId}`,
+    `ge_variable_defs:${orgId}`,
+    `ge_variable_vals:${orgId}`,
+    `ge_template_assignments:${orgId}`,
   ];
   keysToRemove.forEach(k => localStorage.removeItem(k));
 }
@@ -55,10 +56,10 @@ export function isDemoActive(): boolean {
 
 // ── Tenant ────────────────────────────────────────────────────────────────────
 
-function seedTenant(): void {
-  localStorage.setItem('api_current_org', JSON.stringify(DEMO_ORG));
+function seedTenant(profile: VerticalDemoProfile): void {
+  localStorage.setItem('api_current_org', JSON.stringify(profile.org));
 
-  const controllers = DEMO_SITE_GROUPS.map(sg => ({
+  const controllers = profile.siteGroups.map(sg => ({
     id: sg.id,
     org_id: sg.org_id,
     name: sg.name,
@@ -74,15 +75,19 @@ function seedTenant(): void {
   }));
 
   localStorage.setItem('api_controllers', JSON.stringify(controllers));
-  // Default to Northeast Region
+  // Default to the first site group's controller
   localStorage.setItem('api_current_controller', JSON.stringify(controllers[0]));
 }
 
 // ── Global Elements (templates, variables) ─────────────────────────────────
 
-function seedGlobalElements(): void {
-  localStorage.setItem(`ge_templates:${ORG_ID}`, JSON.stringify(DEMO_TEMPLATES));
-  localStorage.setItem(`ge_variable_defs:${ORG_ID}`, JSON.stringify(DEMO_VARIABLE_DEFINITIONS));
-  localStorage.setItem(`ge_variable_vals:${ORG_ID}`, JSON.stringify(DEMO_VARIABLE_VALUES));
-  localStorage.setItem(`ge_template_assignments:${ORG_ID}`, JSON.stringify(DEMO_TEMPLATE_ASSIGNMENTS));
+function seedGlobalElements(profile: VerticalDemoProfile): void {
+  const orgId = profile.org.id;
+  localStorage.setItem(`ge_templates:${orgId}`, JSON.stringify(profile.templates));
+  localStorage.setItem(`ge_variable_defs:${orgId}`, JSON.stringify(profile.variableDefinitions));
+  localStorage.setItem(`ge_variable_vals:${orgId}`, JSON.stringify(profile.variableValues));
+  localStorage.setItem(
+    `ge_template_assignments:${orgId}`,
+    JSON.stringify(profile.templateAssignments)
+  );
 }
