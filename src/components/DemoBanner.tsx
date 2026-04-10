@@ -6,6 +6,16 @@
 export function DemoBanner() {
   if (import.meta.env.VITE_DEMO_MODE !== 'true') return null;
 
+  // Read current org name from localStorage, fall back to 'Demo Mode'
+  const storedOrg = (() => {
+    try {
+      const raw = localStorage.getItem('api_current_org');
+      return raw ? (JSON.parse(raw) as { name?: string }).name ?? 'Demo Mode' : 'Demo Mode';
+    } catch {
+      return 'Demo Mode';
+    }
+  })();
+
   return (
     <div
       className="flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium"
@@ -28,7 +38,7 @@ export function DemoBanner() {
           flexShrink: 0,
         }}
       />
-      DEMO MODE — Meridian Retail Group &nbsp;·&nbsp; All data is simulated &nbsp;·&nbsp; Login: demo / demo
+      DEMO MODE — {storedOrg} &nbsp;·&nbsp; All data is simulated &nbsp;·&nbsp; Login: demo / demo
     </div>
   );
 }
