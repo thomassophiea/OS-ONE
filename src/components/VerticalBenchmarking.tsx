@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Card, CardContent } from './ui/card';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { BENCHMARK_DATA, VERTICALS, type VerticalKey, type BenchmarkMetric } from '../data/benchmarkData';
+import { isDemoActive, bootstrapDemo } from '@/lib/demoSeed';
 
 function getDelta(metric: BenchmarkMetric): number {
   return metric.higherIsBetter
@@ -39,6 +40,10 @@ export function VerticalBenchmarking() {
     setTimeout(() => {
       setSelectedVertical(vertical);
       setAnimating(false);
+      if (isDemoActive()) {
+        bootstrapDemo(vertical);
+        window.location.reload();
+      }
     }, 200);
   };
 
