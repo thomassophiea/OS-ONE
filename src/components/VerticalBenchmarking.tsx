@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { Card, CardContent } from './ui/card';
 import { TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { BENCHMARK_DATA, VERTICALS, type VerticalKey, type BenchmarkMetric } from '../data/benchmarkData';
-import { isDemoActive, bootstrapDemo } from '@/lib/demoSeed';
+import { isDemoActive, bootstrapDemo, teardownDemo } from '@/lib/demoSeed';
 
 function getDelta(metric: BenchmarkMetric): number {
   return metric.higherIsBetter
@@ -28,7 +28,10 @@ function formatValue(value: number, unit: string): string {
 }
 
 export function VerticalBenchmarking() {
-  const [selectedVertical, setSelectedVertical] = useState<VerticalKey>('Education');
+  const [selectedVertical, setSelectedVertical] = useState<VerticalKey>(() => {
+    const stored = localStorage.getItem('demo_active_vertical') as VerticalKey | null;
+    return stored ?? 'Education';
+  });
   const [animating, setAnimating] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -41,6 +44,7 @@ export function VerticalBenchmarking() {
       setSelectedVertical(vertical);
       setAnimating(false);
       if (isDemoActive()) {
+        teardownDemo();
         bootstrapDemo(vertical);
         window.location.reload();
       }

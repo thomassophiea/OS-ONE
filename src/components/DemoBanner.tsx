@@ -1,10 +1,12 @@
 /**
- * DemoBanner — fixed strip shown when VITE_DEMO_MODE=true.
+ * DemoBanner — fixed strip shown when demo mode is active.
  * Renders above the main content area so the user knows they're in demo mode.
  */
 
+import { isDemoActive } from '@/lib/demoSeed';
+
 export function DemoBanner() {
-  if (import.meta.env.VITE_DEMO_MODE !== 'true') return null;
+  if (!isDemoActive()) return null;
 
   // Read current org name from localStorage, fall back to 'Demo Mode'
   const storedOrg = (() => {
