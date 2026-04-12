@@ -1,0 +1,609 @@
+/**
+ * SLE Dashboard - Mist-style Service Level Expectations page
+ * Shows wireless SLE blocks with success rates, timelines, and classifier drill-down
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { ScrollArea, ScrollBar } from '../ui/scroll-area';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Slider } from '../ui/slider';
+import { RefreshCw, Building, Clock, Target, Wifi, Cable, Network, Hexagon, AlignLeft, Settings2 } from 'lucide-react';
+import { apiService, Site } from '../../services/api';
+import { useGlobalFilters } from '../../hooks/useGlobalFilters';
+import { useAppContext } from '@/contexts/AppContext';
+import { sleDataCollectionService } from '../../services/sleDataCollection';
+import { computeAllWirelessSLEs, setActiveThresholds } from '../../services/sleCalculationEngine';
+import { SLERadialMap } from './SLERadialMap';
+import { SLEOctopus } from './SLEOctopus';
+import { SLEHoneycomb } from './SLEHoneycomb';
+import { SLEWaterfall } from './SLEWaterfall';
+import { SLE_STATUS_COLORS, DEFAULT_SLE_THRESHOLDS } from '../../types/sle';
+import type { SLEMetric, SLEThresholds } from '../../types/sle';
+import { toast } from 'sonner';
+
+// SLE threshold configuration per metric
+const SLE_THRESHOLD_CONFIG: Record<string, {
+  label: string;
+  description: string;
+  field: keyof SLEThresholds;
+  subField: string;
+  unit: string;
+  min: number;
+  max: number;
+  step: number;
+  defaultValue: number;
+}> = {
+  timeToConnect: {
+    label: 'Time to Connect',
+    description: 'Maximum acceptable connection time',
+    field: 'timeToConnect',
+    subField: 'maxSeconds',
+    unit: 'seconds',
+    min: 1,
+    max: 30,
+    step: 1,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.timeToConnect.maxSeconds,
+  },
+  successfulConnects: {
+    label: 'Successful Connects',
+    description: 'Minimum success rate required',
+    field: 'successfulConnects',
+    subField: 'minSuccessRate',
+    unit: '%',
+    min: 50,
+    max: 100,
+    step: 1,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.successfulConnects.minSuccessRate,
+  },
+  coverage: {
+    label: 'Coverage',
+    description: 'Minimum acceptable signal strength (RSSI)',
+    field: 'coverage',
+    subField: 'rssiMin',
+    unit: 'dBm',
+    min: -90,
+    max: -50,
+    step: 1,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.coverage.rssiMin,
+  },
+  roaming: {
+    label: 'Roaming',
+    description: 'Maximum acceptable roam latency',
+    field: 'roaming',
+    subField: 'maxLatencyMs',
+    unit: 'ms',
+    min: 50,
+    max: 2000,
+    step: 50,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.roaming.maxLatencyMs,
+  },
+  throughput: {
+    label: 'Throughput',
+    description: 'Minimum acceptable data rate',
+    field: 'throughput',
+    subField: 'minRateBps',
+    unit: 'Mbps',
+    min: 1,
+    max: 100,
+    step: 1,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.throughput.minRateBps / 1_000_000,
+  },
+  capacity: {
+    label: 'Capacity',
+    description: 'Maximum channel utilization threshold',
+    field: 'capacity',
+    subField: 'maxChannelUtil',
+    unit: '%',
+    min: 50,
+    max: 100,
+    step: 5,
+    defaultValue: DEFAULT_SLE_THRESHOLDS.capacity.maxChannelUtil,
+  },
+  apHealth: {
+    label: 'AP Health',
+    description: 'AP health is based on operational status',
+    field: 'apHealth',
+    subField: '',
+    unit: '',
+    min: 0,
+    max: 100,
+    step: 1,
+    defaultValue: 95,
+  },
+};
+
+// Map SLE IDs (snake_case) to config keys (camelCase)
+const SLE_ID_TO_CONFIG_KEY: Record<string, string> = {
+  time_to_connect: 'timeToConnect',
+  successful_connects: 'successfulConnects',
+  coverage: 'coverage',
+  roaming: 'roaming',
+  throughput: 'throughput',
+  capacity: 'capacity',
+  ap_health: 'apHealth',
+};
+
+interface SLEDashboardProps {
+  onClientClick?: (mac: string) => void;
+}
+
+// Storage key for SLE thresholds per site
+const getSLEStorageKey = (siteId: string) => `sle_thresholds_${siteId}`;
+
+// Load thresholds from localStorage
+const loadSiteThresholds = (siteId: string): SLEThresholds => {
+  try {
+    const stored = localStorage.getItem(getSLEStorageKey(siteId));
+    if (stored) {
+      return { ...DEFAULT_SLE_THRESHOLDS, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.warn('Failed to load SLE thresholds:', e);
+  }
+  return { ...DEFAULT_SLE_THRESHOLDS };
+};
+
+// Save thresholds to localStorage
+const saveSiteThresholds = (siteId: string, thresholds: SLEThresholds) => {
+  try {
+    localStorage.setItem(getSLEStorageKey(siteId), JSON.stringify(thresholds));
+  } catch (e) {
+    console.warn('Failed to save SLE thresholds:', e);
+  }
+};
+
+export function SLEDashboard({ onClientClick }: SLEDashboardProps = {}) {
+  const { filters, updateFilter } = useGlobalFilters();
+  const { navigationScope, siteGroups } = useAppContext();
+
+  const [wirelessSLEs, setWirelessSLEs] = useState<SLEMetric[]>([]);
+  const [stations, setStations] = useState<any[]>([]);
+  const [aps, setAps] = useState<any[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [timeRange, setTimeRange] = useState('24h');
+  const selectedSite = filters.site || 'all';
+  const setSelectedSite = (value: string) => updateFilter('site', value);
+  const [activeTab, setActiveTab] = useState('wireless');
+  const [viewMode, setViewMode] = useState<'radial' | 'octopus' | 'honeycomb' | 'waterfall'>('radial');
+  
+  // SLE threshold editing state
+  const [thresholdDialogOpen, setThresholdDialogOpen] = useState(false);
+  const [editingMetric, setEditingMetric] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<number>(0);
+  const [siteThresholds, setSiteThresholds] = useState<SLEThresholds>(() => loadSiteThresholds(filters.site || 'all'));
+
+  // Update thresholds when site changes
+  useEffect(() => {
+    setSiteThresholds(loadSiteThresholds(selectedSite));
+  }, [selectedSite]);
+
+  // Handle clicking on an SLE pill to edit threshold
+  const handleSLEClick = (sleId: string) => {
+    const configKey = SLE_ID_TO_CONFIG_KEY[sleId] || sleId;
+    const config = SLE_THRESHOLD_CONFIG[configKey];
+    if (!config || configKey === 'apHealth') {
+      toast.info('AP Health is based on operational status and cannot be configured');
+      return;
+    }
+    
+    // Get current value from thresholds
+    const fieldData = siteThresholds[config.field] as Record<string, number>;
+    let currentValue = fieldData?.[config.subField] ?? config.defaultValue;
+    
+    // Convert for display (e.g., throughput from bps to Mbps)
+    if (config.field === 'throughput') {
+      currentValue = currentValue / 1_000_000;
+    }
+    
+    setEditingMetric(configKey);
+    setEditingValue(currentValue);
+    setThresholdDialogOpen(true);
+  };
+
+  // Save threshold changes
+  const handleSaveThreshold = () => {
+    if (!editingMetric) return;
+    
+    const config = SLE_THRESHOLD_CONFIG[editingMetric];
+    if (!config) return;
+    
+    // Convert value if needed (e.g., Mbps to bps for throughput)
+    let valueToSave = editingValue;
+    if (config.field === 'throughput') {
+      valueToSave = editingValue * 1_000_000;
+    }
+    
+    const newThresholds: SLEThresholds = {
+      ...siteThresholds,
+      [config.field]: {
+        ...(siteThresholds[config.field] as Record<string, number>),
+        [config.subField]: valueToSave,
+      },
+    };
+    
+    setSiteThresholds(newThresholds);
+    saveSiteThresholds(selectedSite, newThresholds);
+    setThresholdDialogOpen(false);
+    setEditingMetric(null);
+    
+    const siteName = selectedSite === 'all' ? 'All Sites' : sites.find(s => s.id === selectedSite)?.name || selectedSite;
+    toast.success(`${config.label} threshold updated for ${siteName}`);
+    
+    // Reload data with new thresholds
+    loadData(true);
+  };
+
+  // Load sites for filter
+  useEffect(() => {
+    apiService.getSites().then(setSites).catch(() => {});
+  }, []);
+
+  // Load data
+  const loadData = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      const siteFilter = selectedSite !== 'all' ? selectedSite : undefined;
+      const isOrgScope = navigationScope === 'global' && siteGroups.length > 0;
+
+      let stationsArr: any[] = [];
+      let apsArr: any[] = [];
+
+      if (isOrgScope) {
+        // Org scope: fetch from all controllers and aggregate
+        const originalBaseUrl = apiService.getBaseUrl();
+        for (const sg of siteGroups) {
+          try {
+            apiService.setBaseUrl(`${sg.controller_url}/management`);
+            const [sgStations, sgAps] = await Promise.all([
+              apiService.getStations(),
+              apiService.getAccessPoints(),
+            ]);
+            stationsArr.push(...(Array.isArray(sgStations) ? sgStations : []));
+            apsArr.push(...(Array.isArray(sgAps) ? sgAps : []));
+          } catch (err) {
+            console.warn(`[SLEDashboard] Failed to fetch from ${sg.name}:`, err);
+          }
+        }
+        apiService.setBaseUrl(originalBaseUrl === '/api/management' ? null : originalBaseUrl);
+      } else {
+        // Single controller
+        const [stationsData, apsData] = await Promise.all([
+          siteFilter
+            ? apiService.makeAuthenticatedRequest(`/v3/sites/${siteFilter}/stations`, { method: 'GET' }, 15000)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => d ? (Array.isArray(d) ? d : (d.stations || d.clients || d.data || [])) : [])
+                .catch(() => apiService.getStations().then(all => {
+                  return apiService.getSiteById(siteFilter!).then(site => {
+                    const name = site?.name || site?.siteName || siteFilter;
+                    return all.filter((s: any) => s.siteName === name || s.siteId === siteFilter || s.siteName === siteFilter);
+                  });
+                }).catch(() => []))
+            : apiService.getStations(),
+          siteFilter
+            ? apiService.getAccessPointsBySite(siteFilter)
+            : apiService.getAccessPoints(),
+        ]);
+        stationsArr = Array.isArray(stationsData) ? stationsData : [];
+        apsArr = Array.isArray(apsData) ? apsData : [];
+      }
+
+      setStations(stationsArr);
+      setAps(apsArr);
+
+      // Get historical data from SLE collection service
+      const timeRangeMs = timeRange === '1h' ? 3600000 : timeRange === '7d' ? 604800000 : 86400000;
+      const historicalData = sleDataCollectionService.getFilteredData({
+        siteId: selectedSite,
+        scope: 'wireless',
+        startTimestamp: Date.now() - timeRangeMs,
+      });
+
+      // Set active thresholds before computing SLEs
+      setActiveThresholds(siteThresholds);
+      
+      // Compute all SLEs
+      const sles = computeAllWirelessSLEs(stationsArr, apsArr, historicalData);
+      setWirelessSLEs(sles);
+      setLastUpdate(new Date());
+
+      if (isRefresh) toast.success('SLE data refreshed');
+    } catch (error) {
+      console.error('[SLE Dashboard] Error loading data:', error);
+      toast.error('Failed to load SLE data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [selectedSite, timeRange, siteThresholds, navigationScope, siteGroups.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initial load + auto-refresh
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => loadData(true), 60000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Ensure SLE collection is running
+  useEffect(() => {
+    if (!sleDataCollectionService.isCollectionActive()) {
+      sleDataCollectionService.startCollection();
+    }
+  }, []);
+
+  // Overall score (average of all SLEs)
+  const overallScore = wirelessSLEs.length > 0
+    ? wirelessSLEs.reduce((sum, s) => sum + s.successRate, 0) / wirelessSLEs.length
+    : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <RefreshCw className="h-5 w-5 animate-spin" />
+          <span>Loading Service Levels...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl tracking-tight">Service Levels</h2>
+          <p className="text-muted-foreground text-sm">
+            SLE metrics with drill-down classifier analysis
+            {lastUpdate && <span className="ml-2">- Updated {lastUpdate.toLocaleTimeString()}</span>}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={selectedSite} onValueChange={setSelectedSite}>
+            <SelectTrigger className="w-48">
+              <Building className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Select Site" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sites</SelectItem>
+              {sites.map(site => (
+                <SelectItem key={site.id} value={site.id}>
+                  {site.name || site.siteName || site.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-44">
+              <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1h">Last Hour</SelectItem>
+              <SelectItem value="24h">Last 24 Hours</SelectItem>
+              <SelectItem value="7d">Last 7 Days</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button onClick={() => loadData(true)} variant="outline" disabled={refreshing}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary Bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Overall score */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/50">
+          <Target className="h-4 w-4 text-purple-400" />
+          <span className="text-xs font-medium">Overall</span>
+          <span className="text-sm font-bold" style={{ color: SLE_STATUS_COLORS[overallScore >= 95 ? 'good' : overallScore >= 80 ? 'warn' : 'poor'].hex }}>
+            {overallScore.toFixed(1)}%
+          </span>
+        </div>
+
+        {/* Per-SLE pills - clickable to edit thresholds */}
+        {wirelessSLEs.map(sle => (
+          <button
+            key={sle.id}
+            onClick={() => handleSLEClick(sle.id)}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-muted/20 border border-border/30 hover:border-primary/50 hover:bg-muted/40 cursor-pointer transition-all group"
+            title={`Click to adjust ${sle.name} threshold`}
+          >
+            <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">{sle.name}</span>
+            <span className="text-xs font-bold" style={{ color: SLE_STATUS_COLORS[sle.status].hex }}>
+              {sle.successRate.toFixed(1)}%
+            </span>
+            <Settings2 className="h-3 w-3 text-muted-foreground/0 group-hover:text-muted-foreground transition-all" />
+          </button>
+        ))}
+      </div>
+
+      {/* Tabs: Wireless / Wired */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="wireless" className="flex items-center gap-1.5">
+              <Wifi className="h-3.5 w-3.5" />
+              Wireless
+              <Badge variant="secondary" className="text-[10px] ml-1">{wirelessSLEs.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="wired" className="flex items-center gap-1.5" disabled>
+              <Cable className="h-3.5 w-3.5" />
+              Wired
+              <Badge variant="outline" className="text-[10px] ml-1">Coming Soon</Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* View toggle */}
+          {activeTab === 'wireless' && (
+            <div className="flex items-center rounded-md border border-border/50 p-0.5 bg-muted/30 gap-0.5">
+              {([
+                { id: 'radial', label: 'Radial', Icon: Network },
+                { id: 'octopus', label: 'Octopus', Icon: Target },
+                { id: 'honeycomb', label: 'Hex', Icon: Hexagon },
+                { id: 'waterfall', label: 'Waterfall', Icon: AlignLeft },
+              ] as const).map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setViewMode(id)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                    viewMode === id
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <TabsContent value="wireless" className="mt-4">
+          {wirelessSLEs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Wifi className="h-12 w-12 text-muted-foreground/40 mb-4" />
+              <h3 className="text-base font-medium text-foreground mb-1">No SLE data available</h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                SLE metrics require connected clients and access points. Try selecting a different site or time range, or wait for data to be collected.
+              </p>
+              <button
+                onClick={() => loadData(true)}
+                className="mt-4 flex items-center gap-2 text-sm text-primary hover:underline"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh data
+              </button>
+            </div>
+          ) : (
+            <>
+              {viewMode === 'radial' && <SLERadialMap sles={wirelessSLEs} stations={stations} aps={aps} onClientClick={onClientClick} />}
+              {viewMode === 'octopus' && <SLEOctopus sles={wirelessSLEs} stations={stations} aps={aps} onClientClick={onClientClick} />}
+              {viewMode === 'honeycomb' && <SLEHoneycomb sles={wirelessSLEs} stations={stations} aps={aps} onClientClick={onClientClick} />}
+              {viewMode === 'waterfall' && <SLEWaterfall sles={wirelessSLEs} stations={stations} aps={aps} onClientClick={onClientClick} />}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="wired" className="mt-4">
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <div className="text-center">
+              <Cable className="mx-auto h-12 w-12 mb-3 opacity-50" />
+              <h3 className="text-lg font-medium mb-1">Wired SLEs Coming Soon</h3>
+              <p className="text-sm">Switch Health, Throughput, Successful Connect, and Switch Bandwidth</p>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* SLE Threshold Edit Dialog */}
+      <Dialog open={thresholdDialogOpen} onOpenChange={setThresholdDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-primary" />
+              {editingMetric && SLE_THRESHOLD_CONFIG[editingMetric]?.label} Threshold
+            </DialogTitle>
+            <DialogDescription>
+              {editingMetric && SLE_THRESHOLD_CONFIG[editingMetric]?.description}
+              <br />
+              <span className="text-xs text-muted-foreground mt-1 block">
+                Site: {selectedSite === 'all' ? 'All Sites' : sites.find(s => s.id === selectedSite)?.name || selectedSite}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          {editingMetric && SLE_THRESHOLD_CONFIG[editingMetric] && (
+            <div className="space-y-6 py-4">
+              {/* Current value display */}
+              <div className="text-center">
+                <div className="text-4xl font-bold text-primary">
+                  {editingValue}
+                  <span className="text-lg text-muted-foreground ml-1">
+                    {SLE_THRESHOLD_CONFIG[editingMetric].unit}
+                  </span>
+                </div>
+              </div>
+              
+              {/* Slider */}
+              <div className="space-y-3">
+                <Slider
+                  value={[editingValue]}
+                  onValueChange={([val]) => setEditingValue(val)}
+                  min={SLE_THRESHOLD_CONFIG[editingMetric].min}
+                  max={SLE_THRESHOLD_CONFIG[editingMetric].max}
+                  step={SLE_THRESHOLD_CONFIG[editingMetric].step}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{SLE_THRESHOLD_CONFIG[editingMetric].min} {SLE_THRESHOLD_CONFIG[editingMetric].unit}</span>
+                  <span>{SLE_THRESHOLD_CONFIG[editingMetric].max} {SLE_THRESHOLD_CONFIG[editingMetric].unit}</span>
+                </div>
+              </div>
+              
+              {/* Manual input */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="threshold-value" className="text-sm whitespace-nowrap">
+                  Exact value:
+                </Label>
+                <Input
+                  id="threshold-value"
+                  type="number"
+                  value={editingValue}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    if (!isNaN(val)) {
+                      const config = SLE_THRESHOLD_CONFIG[editingMetric];
+                      setEditingValue(Math.min(config.max, Math.max(config.min, val)));
+                    }
+                  }}
+                  min={SLE_THRESHOLD_CONFIG[editingMetric].min}
+                  max={SLE_THRESHOLD_CONFIG[editingMetric].max}
+                  step={SLE_THRESHOLD_CONFIG[editingMetric].step}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">
+                  {SLE_THRESHOLD_CONFIG[editingMetric].unit}
+                </span>
+              </div>
+              
+              {/* Reset to default */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => setEditingValue(SLE_THRESHOLD_CONFIG[editingMetric].defaultValue)}
+              >
+                Reset to default ({SLE_THRESHOLD_CONFIG[editingMetric].defaultValue} {SLE_THRESHOLD_CONFIG[editingMetric].unit})
+              </Button>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setThresholdDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveThreshold}>
+              Save Threshold
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
