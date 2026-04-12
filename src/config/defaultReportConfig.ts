@@ -18,7 +18,7 @@ function w(
   displayType: ReportWidgetConfig['displayType'],
   gridSpan: 1 | 2 | 3 | 4 = 1,
   title?: string,
-  config?: Record<string, any>,
+  config?: Record<string, any>
 ): ReportWidgetConfig {
   return {
     id,
@@ -48,7 +48,7 @@ const executiveSummary: ReportPageConfig = {
     w('exec-sc6', '_metric_networks', 'scorecard', 1, 'Networks'),
     w('exec-sc7', '_metric_avg_rssi', 'scorecard', 1, 'Avg RSSI'),
     w('exec-sc8', '_metric_ap_models', 'scorecard', 1, 'AP Models'),
-    w('exec-band', '_metric_band_distribution', 'pie_chart', 2, 'Client Band Distribution'),
+    w('exec-band', '_metric_band_distribution', 'bar_chart', 2, 'Client Band Distribution'),
     w('exec-ssid', '_metric_ssid_distribution', 'bar_chart', 2, 'Clients by Network'),
     w('exec-rssi', '_metric_rssi_distribution', 'bar_chart', 2, 'Signal Quality Distribution'),
     w('exec-bp', '_metric_best_practices', 'distribution', 2, 'Best Practices'),
@@ -84,7 +84,7 @@ const accessPoints: ReportPageConfig = {
     w('ap-sc2', '_metric_online_aps', 'scorecard', 1, 'Online'),
     w('ap-sc3', '_metric_offline_aps', 'scorecard', 1, 'Offline'),
     w('ap-sc4', '_metric_ap_models', 'scorecard', 1, 'Models'),
-    w('ap-model', '_metric_ap_model_distribution', 'pie_chart', 2, 'AP Model Distribution'),
+    w('ap-model', '_metric_ap_model_distribution', 'bar_chart', 2, 'AP Model Distribution'),
     w('ap-inv', '_metric_ap_inventory', 'ranking', 2, 'Inventory by Model'),
     w('ap-top-tp', 'topAccessPointsByThroughput', 'ranking', 2, 'Top APs by Throughput'),
     w('ap-top-cl', 'topAccessPointsByUserCount', 'ranking', 2, 'Top APs by Client Count'),
@@ -135,6 +135,7 @@ const rfAnalytics: ReportPageConfig = {
     w('rf-sc1', '_metric_band_24', 'scorecard', 1, '2.4 GHz Clients'),
     w('rf-sc2', '_metric_band_5', 'scorecard', 1, '5 GHz Clients'),
     w('rf-sc3', '_metric_band_6', 'scorecard', 1, '6 GHz Clients'),
+    w('rf-sc4', '_metric_avg_rssi', 'scorecard', 1, 'Avg SNR'),
     w('rf-rq', 'rfQuality', 'ranking', 2, 'RF Quality'),
     w('rf-ch1', 'channelDistributionRadio1', 'ranking', 2, 'Channel Distribution (Radio 1)'),
     w('rf-ch2', 'channelDistributionRadio2', 'ranking', 2, 'Channel Distribution (Radio 2)'),
@@ -150,7 +151,13 @@ const applications: ReportPageConfig = {
   category: 'apps',
   widgets: [
     w('app-usage', 'topAppGroupsByUsage', 'ranking', 2, 'Top Applications by Usage'),
-    w('app-clients', 'topAppGroupsByClientCountReport', 'ranking', 2, 'Top Applications by Client Count'),
+    w(
+      'app-clients',
+      'topAppGroupsByClientCountReport',
+      'ranking',
+      2,
+      'Top Applications by Client Count'
+    ),
   ],
 };
 
@@ -164,6 +171,7 @@ const sitesPage: ReportPageConfig = {
     w('site-sc1', '_metric_total_sites', 'scorecard', 1, 'Total Sites'),
     w('site-sc2', '_metric_total_aps', 'scorecard', 1, 'Total APs'),
     w('site-sc3', '_metric_total_clients', 'scorecard', 1, 'Total Clients'),
+    w('site-sc4', '_metric_networks', 'scorecard', 1, 'Networks'),
     w('site-tp', 'topSitesByThroughput', 'ranking', 2, 'Top Sites by Throughput'),
     w('site-cl', 'topSitesByClientCount', 'ranking', 2, 'Top Sites by Client Count'),
   ],
@@ -194,8 +202,8 @@ export const DEFAULT_REPORT_CONFIG: ReportConfig = {
 /** Get all platform_report widget keys needed for a config */
 export function getWidgetKeysForConfig(config: ReportConfig): string[] {
   const keys = new Set<string>();
-  config.pages.forEach(page => {
-    page.widgets.forEach(w => {
+  config.pages.forEach((page) => {
+    page.widgets.forEach((w) => {
       if (w.source === 'platform_report') {
         keys.add(w.widgetKey);
       }

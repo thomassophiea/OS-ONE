@@ -11,16 +11,7 @@ interface TimelineState {
   currentTime: number | null;
   timeWindow: TimeWindow;
   isLocked: boolean;
-  zoomMode: 'highlight' | 'zoom';
-  zoomDomain: [number, number] | null;
-  pendingRefetch: boolean;
 }
-
-const DEFAULT_STATE: Omit<TimelineState, 'currentTime' | 'timeWindow' | 'isLocked'> = {
-  zoomMode: 'highlight',
-  zoomDomain: null,
-  pendingRefetch: false,
-};
 
 // Module-level state storage per scope
 const scopedState: Record<TimelineScope, TimelineState> = {
@@ -28,13 +19,11 @@ const scopedState: Record<TimelineScope, TimelineState> = {
     currentTime: null,
     timeWindow: { start: null, end: null },
     isLocked: false,
-    ...DEFAULT_STATE,
   },
   'ap-insights': {
     currentTime: null,
     timeWindow: { start: null, end: null },
     isLocked: false,
-    ...DEFAULT_STATE,
   },
 };
 
@@ -150,49 +139,14 @@ export function useTimelineNavigation(scope: TimelineScope) {
       currentTime: null,
       timeWindow: { start: null, end: null },
       isLocked: false,
-      zoomMode: 'highlight',
-      zoomDomain: null,
-      pendingRefetch: false,
     });
   }, [scope]);
 
-  // Soft reset - clear time window and zoom, preserve lock and current time
+  // Soft reset - only clear time window, preserve lock and current time
   const softReset = useCallback(() => {
     setState(scope, {
       timeWindow: { start: null, end: null },
-      zoomDomain: null,
-      pendingRefetch: false,
     });
-  }, [scope]);
-
-  // Set zoom mode (highlight or zoom)
-  const setZoomMode = useCallback((mode: 'highlight' | 'zoom') => {
-    setState(scope, { zoomMode: mode });
-  }, [scope]);
-
-  // Commit a drag selection as a zoom domain (clears live preview overlay)
-  const applyZoom = useCallback((start: number, end: number) => {
-    const [lo, hi] = start < end ? [start, end] : [end, start];
-    setState(scope, {
-      zoomDomain: [lo, hi],
-      pendingRefetch: true,
-      timeWindow: { start: null, end: null },
-    });
-  }, [scope]);
-
-  // Clear zoom domain and pending refetch flag
-  const clearZoom = useCallback(() => {
-    setState(scope, { zoomDomain: null, pendingRefetch: false });
-  }, [scope]);
-
-  // Clear only the pending refetch flag (keep zoom domain visible)
-  const clearPendingRefetch = useCallback(() => {
-    setState(scope, { pendingRefetch: false });
-  }, [scope]);
-
-  // Lock the cursor at a specific timestamp (bypasses isLocked check)
-  const lockAt = useCallback((timestamp: number) => {
-    setState(scope, { currentTime: timestamp, isLocked: true });
   }, [scope]);
 
   // Sync timeline from another scope
@@ -219,9 +173,6 @@ export function useTimelineNavigation(scope: TimelineScope) {
     currentTime: state.currentTime,
     timeWindow: state.timeWindow,
     isLocked: state.isLocked,
-    zoomMode: state.zoomMode,
-    zoomDomain: state.zoomDomain,
-    pendingRefetch: state.pendingRefetch,
 
     // Actions
     setCurrentTime,
@@ -233,10 +184,5 @@ export function useTimelineNavigation(scope: TimelineScope) {
     resetTimeline,
     softReset,
     syncFromScope,
-    setZoomMode,
-    applyZoom,
-    clearZoom,
-    clearPendingRefetch,
-    lockAt,
   };
 }

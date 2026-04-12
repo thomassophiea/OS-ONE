@@ -35,7 +35,6 @@ export const ORG_PAGES = new Set([
   'event-alarm-dashboard',
   'security-dashboard',
   'pci-report',
-  'configuration-drift',
   // Admin & Tools
   'tools',
   'administration',

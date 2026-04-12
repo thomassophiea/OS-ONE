@@ -12,20 +12,34 @@ import { Badge } from './ui/badge';
 import { Skeleton } from './ui/skeleton';
 import { ScrollArea } from './ui/scroll-area';
 import {
-  FileText, Wifi, Users, Activity, BarChart3, Radio, AppWindow, MapPin,
-  Shield, RefreshCw, Download, Printer, Share2, Pencil, Check, Plus,
-  Copy, Trash2, RotateCcw, Clock, ChevronLeft, ChevronRight, Settings,
+  FileText,
+  Wifi,
+  Users,
+  Activity,
+  BarChart3,
+  Radio,
+  AppWindow,
+  MapPin,
+  Shield,
+  RefreshCw,
+  Download,
+  Printer,
+  Share2,
+  Pencil,
+  Check,
+  Plus,
+  Copy,
+  Trash2,
+  RotateCcw,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
 } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cn } from './ui/utils';
 import { apiService } from '../services/api';
-import { fetchWidgetData } from '../services/widgetService';
+import { fetchWidgetData, parseTimeseriesData, parseRankingData } from '../services/widgetService';
 import { useGlobalFilters } from '../hooks/useGlobalFilters';
 import { useReportConfig } from '../hooks/useReportConfig';
 import { getWidgetKeysForConfig } from '../config/defaultReportConfig';
@@ -36,7 +50,16 @@ import { toast } from 'sonner';
 import { formatBitsPerSecond, formatBytes } from '../lib/units';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  FileText, Wifi, Users, Activity, BarChart3, Radio, AppWindow, MapPin, Shield, Settings,
+  FileText,
+  Wifi,
+  Users,
+  Activity,
+  BarChart3,
+  Radio,
+  AppWindow,
+  MapPin,
+  Shield,
+  Settings,
 };
 
 const DURATION_OPTIONS = [
@@ -46,12 +69,62 @@ const DURATION_OPTIONS = [
   { value: '30D', label: '30D' },
 ];
 
+function widgetHasData(
+  widget: { widgetKey: string; source: string; displayType: string },
+  metrics: ReportMetrics,
+  widgetData: Record<string, any>,
+  tier2Loading: boolean
+): boolean {
+  const { widgetKey, source, displayType } = widget;
+
+  // Scorecards always show — a 0 value is still informative
+  if (displayType === 'scorecard') return true;
+
+  // Platform report widgets: show skeleton while loading, hide if empty after load
+  if (source === 'platform_report') {
+    if (tier2Loading) return true;
+    if (displayType === 'timeseries') {
+      const parsed = parseTimeseriesData(widgetData[widgetKey]);
+      return (
+        parsed.length > 0 &&
+        parsed[0]?.statistics?.length > 0 &&
+        parsed[0].statistics.some((s: any) => s.values?.length > 0)
+      );
+    }
+    if (displayType === 'ranking') {
+      return parseRankingData(widgetData[widgetKey]).length > 0;
+    }
+    return !!widgetData[widgetKey];
+  }
+
+  // Computed widgets: check data availability
+  switch (widgetKey) {
+    case '_metric_ssid_distribution':
+      return metrics.ssidDist.length > 0;
+    case '_metric_band_distribution':
+      return Object.values(metrics.bands).some((v) => v > 0);
+    case '_metric_ap_model_distribution':
+      return metrics.apModels.length > 0;
+    case '_metric_rssi_distribution':
+      return Object.values(metrics.rssiRanges).some((v) => v > 0);
+    case '_metric_best_practices':
+      return metrics.bpTotal > 0;
+    case '_metric_best_practices_full':
+      return metrics.bestPractices.length > 0;
+    case '_metric_ap_inventory':
+      return metrics.apModels.length > 0;
+    default:
+      return true;
+  }
+}
+
 export function ReportCenter() {
   const { filters } = useGlobalFilters();
   const rc = useReportConfig();
 
   const [duration, setDuration] = useState(rc.activeConfig.duration || '24H');
-  const [loading, setLoading] = useState(true);
+  const [tier1Loading, setTier1Loading] = useState(true);
+  const [tier2Loading, setTier2Loading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -67,53 +140,81 @@ export function ReportCenter() {
   const [bestPractices, setBestPractices] = useState<any[]>([]);
 
   const siteId = filters.site !== 'all' ? filters.site : undefined;
-  const widgetKeysNeeded = useMemo(() => getWidgetKeysForConfig(rc.activeConfig), [rc.activeConfig]);
+  const widgetKeysNeeded = useMemo(
+    () => getWidgetKeysForConfig(rc.activeConfig),
+    [rc.activeConfig]
+  );
 
-  // ── Data Loading ──
-  const loadAllData = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+  // ── Tier 1: Fast local data (APs, clients, sites, services, best practices) ──
+  const loadTier1 = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (!isRefresh) setTier1Loading(true);
 
-      const [aps, stations, sites, services, widgets, bpResp] = await Promise.allSettled([
-        apiService.getAccessPointsBySite(siteId),
-        apiService.getAllStations(),
-        apiService.getSites(),
-        apiService.getServices(),
-        widgetKeysNeeded.length > 0
-          ? fetchWidgetData({ siteId, duration, widgets: widgetKeysNeeded })
-          : Promise.resolve({}),
-        apiService.makeAuthenticatedRequest('/v1/bestpractices/evaluate', { method: 'GET' }, 10000),
-      ]);
+        const [aps, stations, sites, services, bpResp] = await Promise.allSettled([
+          apiService.getAccessPointsBySite(siteId),
+          apiService.getAllStations(),
+          apiService.getSites(),
+          apiService.getServices(),
+          apiService.makeAuthenticatedRequest(
+            '/v1/bestpractices/evaluate',
+            { method: 'GET' },
+            10000
+          ),
+        ]);
 
-      if (aps.status === 'fulfilled') setApData(aps.value || []);
-      if (stations.status === 'fulfilled') setStationData(stations.value || []);
-      if (sites.status === 'fulfilled') setSiteData(sites.value || []);
-      if (services.status === 'fulfilled') setServiceData(services.value || []);
-      if (widgets.status === 'fulfilled') setWidgetData(widgets.value || {});
+        if (aps.status === 'fulfilled') setApData(aps.value || []);
+        if (stations.status === 'fulfilled') setStationData(stations.value || []);
+        if (sites.status === 'fulfilled') setSiteData(sites.value || []);
+        if (services.status === 'fulfilled') setServiceData(services.value || []);
 
-      if (bpResp.status === 'fulfilled') {
-        try {
-          const resp = bpResp.value;
-          if (resp.ok) {
-            const data = await resp.json();
-            setBestPractices(data?.conditions || []);
+        if (bpResp.status === 'fulfilled') {
+          try {
+            const resp = bpResp.value;
+            if (resp.ok) {
+              const data = await resp.json();
+              setBestPractices(data?.conditions || []);
+            }
+          } catch {
+            /* ignore */
           }
-        } catch { /* ignore */ }
-      }
+        }
 
-      setLastUpdated(new Date());
-      if (isRefresh) toast.success('Report data refreshed');
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('[ReportCenter] Failed to load tier 1 data:', error);
+        toast.error('Failed to load report data');
+      } finally {
+        setTier1Loading(false);
+      }
+    },
+    [siteId]
+  );
+
+  // ── Tier 2: Slow platform widget data (up to 30s) ──
+  const loadTier2 = useCallback(async () => {
+    try {
+      setTier2Loading(true);
+      if (widgetKeysNeeded.length > 0) {
+        const data = await fetchWidgetData({ siteId, duration, widgets: widgetKeysNeeded });
+        setWidgetData(data || {});
+      } else {
+        setWidgetData({});
+      }
     } catch (error) {
-      console.error('[ReportCenter] Failed to load data:', error);
-      toast.error('Failed to load report data');
+      console.error('[ReportCenter] Failed to load platform widget data:', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setTier2Loading(false);
     }
   }, [siteId, duration, widgetKeysNeeded]);
 
-  useEffect(() => { loadAllData(); }, [loadAllData]);
+  // Fire both tiers concurrently on mount and when dependencies change
+  useEffect(() => {
+    loadTier1();
+  }, [loadTier1]);
+  useEffect(() => {
+    loadTier2();
+  }, [loadTier2]);
 
   // ── Computed Metrics ──
   const metrics: ReportMetrics = useMemo(() => {
@@ -124,14 +225,16 @@ export function ReportCenter() {
     }).length;
 
     const totalClients = stationData.length;
-    const authenticated = stationData.filter((s: any) =>
-      s.authenticated === undefined || s.authenticated === true || s.authenticated === 1
+    const authenticated = stationData.filter(
+      (s: any) => s.authenticated === undefined || s.authenticated === true || s.authenticated === 1
     ).length;
 
-    let totalUpload = 0, totalDownload = 0;
+    let totalUpload = 0,
+      totalDownload = 0;
     const bands: Record<string, number> = { '2.4 GHz': 0, '5 GHz': 0, '6 GHz': 0 };
     const rssiRanges = { excellent: 0, good: 0, fair: 0, poor: 0 };
-    let rssiSum = 0, rssiCount = 0;
+    let rssiSum = 0,
+      rssiCount = 0;
     const ssidMap = new Map<string, number>();
 
     stationData.forEach((s: any) => {
@@ -154,7 +257,8 @@ export function ReportCenter() {
 
       const rssi = s.rssi || s.rss || 0;
       if (rssi < 0) {
-        rssiSum += rssi; rssiCount++;
+        rssiSum += rssi;
+        rssiCount++;
         if (rssi >= -50) rssiRanges.excellent++;
         else if (rssi >= -60) rssiRanges.good++;
         else if (rssi >= -70) rssiRanges.fair++;
@@ -176,14 +280,32 @@ export function ReportCenter() {
     const bpError = bestPractices.filter((b: any) => b.status === 'Error').length;
 
     return {
-      totalAps, onlineAps, offlineAps: totalAps - onlineAps,
-      totalClients, authenticated,
-      totalUpload, totalDownload, totalThroughput: totalUpload + totalDownload,
-      bands, rssiRanges, avgRssi: rssiCount > 0 ? Math.round(rssiSum / rssiCount) : 0,
-      apModels: Array.from(modelMap.entries()).map(([model, count]) => ({ model, count })).sort((a, b) => b.count - a.count),
-      ssidDist: Array.from(ssidMap.entries()).map(([name, count]) => ({ name, count, pct: totalClients > 0 ? (count / totalClients) * 100 : 0 })).sort((a, b) => b.count - a.count),
-      totalSites: siteData.length, totalServices: serviceData.length,
-      bpGood, bpWarn, bpError,
+      totalAps,
+      onlineAps,
+      offlineAps: totalAps - onlineAps,
+      totalClients,
+      authenticated,
+      totalUpload,
+      totalDownload,
+      totalThroughput: totalUpload + totalDownload,
+      bands,
+      rssiRanges,
+      avgRssi: rssiCount > 0 ? Math.round(rssiSum / rssiCount) : 0,
+      apModels: Array.from(modelMap.entries())
+        .map(([model, count]) => ({ model, count }))
+        .sort((a, b) => b.count - a.count),
+      ssidDist: Array.from(ssidMap.entries())
+        .map(([name, count]) => ({
+          name,
+          count,
+          pct: totalClients > 0 ? (count / totalClients) * 100 : 0,
+        }))
+        .sort((a, b) => b.count - a.count),
+      totalSites: siteData.length,
+      totalServices: serviceData.length,
+      bpGood,
+      bpWarn,
+      bpError,
       bpScore: bestPractices.length > 0 ? Math.round((bpGood / bestPractices.length) * 100) : 100,
       bpTotal: bestPractices.length,
       bestPractices,
@@ -191,11 +313,19 @@ export function ReportCenter() {
   }, [apData, stationData, siteData, serviceData, bestPractices]);
 
   // ── Handlers ──
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.allSettled([loadTier1(true), loadTier2()]);
+    setRefreshing(false);
+    toast.success('Report data refreshed');
+  }, [loadTier1, loadTier2]);
+
   const handleExport = () => {
     const report = {
       generatedAt: new Date().toISOString(),
       config: rc.activeConfig.name,
-      duration, site: siteId || 'All Sites',
+      duration,
+      site: siteId || 'All Sites',
       metrics: {
         accessPoints: { total: metrics.totalAps, online: metrics.onlineAps },
         clients: { total: metrics.totalClients, authenticated: metrics.authenticated },
@@ -221,26 +351,38 @@ export function ReportCenter() {
     return config !== null;
   };
 
-  // ── Loading State ──
-  if (loading) {
+  // ── Loading State (only blocks on fast Tier 1 data) ──
+  if (tier1Loading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-full rounded" />
         <div className="grid grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}><CardContent className="pt-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
+            <Card key={i}>
+              <CardContent className="pt-4">
+                <Skeleton className="h-16 w-full" />
+              </CardContent>
+            </Card>
           ))}
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Card><CardContent className="pt-4"><Skeleton className="h-48 w-full" /></CardContent></Card>
-          <Card><CardContent className="pt-4"><Skeleton className="h-48 w-full" /></CardContent></Card>
+          <Card>
+            <CardContent className="pt-4">
+              <Skeleton className="h-48 w-full" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <Skeleton className="h-48 w-full" />
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
   const currentPage = rc.activePage;
-  const visiblePages = rc.activeConfig.pages.filter(p => p.visible !== false);
+  const visiblePages = rc.activeConfig.pages.filter((p) => p.visible !== false);
 
   return (
     <div className="space-y-0">
@@ -252,11 +394,15 @@ export function ReportCenter() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {rc.configs.map(c => (
+              {rc.configs.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   <div className="flex items-center gap-2">
                     <span>{c.name}</span>
-                    {c.isDefault && <Badge variant="secondary" className="text-[9px]">Default</Badge>}
+                    {c.isDefault && (
+                      <Badge variant="secondary" className="text-[9px]">
+                        Default
+                      </Badge>
+                    )}
                   </div>
                 </SelectItem>
               ))}
@@ -277,24 +423,56 @@ export function ReportCenter() {
             variant={isEditing ? 'default' : 'ghost'}
             size="sm"
             onClick={() => {
-              if (isEditing) { setIsEditing(false); setIsEditorOpen(false); }
-              else { setIsEditing(true); setIsEditorOpen(true); }
+              if (isEditing) {
+                setIsEditing(false);
+                setIsEditorOpen(false);
+              } else {
+                setIsEditing(true);
+                setIsEditorOpen(true);
+              }
             }}
             className="text-xs h-7"
           >
-            {isEditing ? <><Check className="h-3 w-3 mr-1" />Done</> : <><Pencil className="h-3 w-3 mr-1" />Edit</>}
+            {isEditing ? (
+              <>
+                <Check className="h-3 w-3 mr-1" />
+                Done
+              </>
+            ) : (
+              <>
+                <Pencil className="h-3 w-3 mr-1" />
+                Edit
+              </>
+            )}
           </Button>
 
           {isEditing && (
             <>
-              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => rc.createConfig('New Report')}>
-                <Plus className="h-3 w-3 mr-1" />New
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => rc.createConfig('New Report')}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                New
               </Button>
-              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => rc.duplicateConfig(rc.activeConfig.id)}>
-                <Copy className="h-3 w-3 mr-1" />Duplicate
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => rc.duplicateConfig(rc.activeConfig.id)}
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Duplicate
               </Button>
               {!rc.activeConfig.isDefault && (
-                <Button variant="ghost" size="sm" className="text-xs h-7 text-red-400" onClick={() => rc.deleteConfig(rc.activeConfig.id)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-7 text-red-400"
+                  onClick={() => rc.deleteConfig(rc.activeConfig.id)}
+                >
                   <Trash2 className="h-3 w-3" />
                 </Button>
               )}
@@ -305,13 +483,15 @@ export function ReportCenter() {
             <>
               {/* Duration */}
               <div className="flex items-center border border-border/50 rounded-md overflow-hidden h-7">
-                {DURATION_OPTIONS.map(opt => (
+                {DURATION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setDuration(opt.value)}
                     className={cn(
                       'px-2 py-0.5 text-[10px] font-medium transition-colors',
-                      duration === opt.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                      duration === opt.value
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted/50'
                     )}
                   >
                     {opt.label}
@@ -319,16 +499,32 @@ export function ReportCenter() {
                 ))}
               </div>
 
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => loadAllData(true)} disabled={refreshing}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
                 <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setIsShareOpen(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setIsShareOpen(true)}
+              >
                 <Share2 className="h-3.5 w-3.5" />
               </Button>
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleExport}>
                 <Download className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => window.print()}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => window.print()}
+              >
                 <Printer className="h-3.5 w-3.5" />
               </Button>
             </>
@@ -338,7 +534,7 @@ export function ReportCenter() {
 
       {/* ── Page Tab Strip ── */}
       <div className="flex items-center gap-1 border-b border-border/50 mb-4 overflow-x-auto scrollbar-none print:hidden">
-        {visiblePages.map(page => {
+        {visiblePages.map((page) => {
           const IconComp = ICON_MAP[page.icon || ''] || FileText;
           const isActive = currentPage?.id === page.id;
           return (
@@ -377,33 +573,43 @@ export function ReportCenter() {
             <p className="text-xs text-muted-foreground">{currentPage.description}</p>
           )}
 
-          {/* Widget grid */}
-          <div className="grid grid-cols-4 gap-4">
-            {currentPage.widgets.map(widget => (
-              <div
-                key={widget.id}
-                className={cn('col-span-4', {
-                  'col-span-4 md:col-span-1': (widget.gridSpan || 1) === 1,
-                  'col-span-4 md:col-span-2': widget.gridSpan === 2,
-                  'col-span-4 md:col-span-3': widget.gridSpan === 3,
-                  'col-span-4': widget.gridSpan === 4,
-                })}
-              >
-                <ReportWidgetRenderer
-                  widget={widget}
-                  widgetData={widgetData}
-                  metrics={metrics}
-                />
+          {/* Widget grid — only render widgets that have data */}
+          {(() => {
+            const visibleWidgets = currentPage.widgets.filter((w) =>
+              widgetHasData(w, metrics, widgetData, tier2Loading)
+            );
+            return visibleWidgets.length > 0 ? (
+              <div className="grid grid-cols-4 gap-4">
+                {visibleWidgets.map((widget) => (
+                  <div
+                    key={widget.id}
+                    className={cn('col-span-4', {
+                      'col-span-4 md:col-span-1': (widget.gridSpan || 1) === 1,
+                      'col-span-4 md:col-span-2': widget.gridSpan === 2,
+                      'col-span-4 md:col-span-3': widget.gridSpan === 3,
+                      'col-span-4': widget.gridSpan === 4,
+                    })}
+                  >
+                    <ReportWidgetRenderer
+                      widget={widget}
+                      widgetData={widgetData}
+                      metrics={metrics}
+                      platformLoading={tier2Loading && widget.source === 'platform_report'}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {currentPage.widgets.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <p className="text-sm">This page has no widgets.</p>
-              <p className="text-xs mt-1">Click Edit to add widgets from the catalog.</p>
-            </div>
-          )}
+            ) : currentPage.widgets.length === 0 ? (
+              <div className="text-center py-16 text-muted-foreground">
+                <p className="text-sm">This page has no widgets.</p>
+                <p className="text-xs mt-1">Click Edit to add widgets from the catalog.</p>
+              </div>
+            ) : (
+              <div className="text-center py-16 text-muted-foreground">
+                <p className="text-sm">No widgets have data to display.</p>
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <div className="text-center py-16 text-muted-foreground">
@@ -414,7 +620,10 @@ export function ReportCenter() {
 
       {/* Report Footer */}
       <div className="mt-8 pt-4 border-t border-border/30 flex items-center justify-between text-[10px] text-muted-foreground print:mt-12">
-        <span>Extreme Report Studio &middot; {rc.activeConfig.name} &middot; {currentPage?.title || ''} &middot; {new Date().toLocaleDateString()}</span>
+        <span>
+          Extreme Report Studio &middot; {rc.activeConfig.name} &middot; {currentPage?.title || ''}{' '}
+          &middot; {new Date().toLocaleDateString()}
+        </span>
         <span>Extreme Networks &middot; Powered by Platform ONE</span>
       </div>
 
