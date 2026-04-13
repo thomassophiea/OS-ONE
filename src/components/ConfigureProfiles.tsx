@@ -72,7 +72,12 @@ export function ConfigureProfiles() {
           <Button variant="outline" size="sm" onClick={loadProfiles} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button size="sm" onClick={openCreate}>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
+            onClick={openCreate}
+          >
             <Plus className="h-4 w-4 mr-1" />New Profile
           </Button>
         </div>

@@ -444,7 +444,13 @@ export function EventNotificationsConfig() {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={saveWebhook} className="bg-primary hover:bg-primary/90 text-primary-foreground">Save</Button>
+                  <Button
+                    onClick={saveWebhook}
+                    variant="outline"
+                    className="text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
+                  >
+                    Save
+                  </Button>
                 </DialogFooter>
               </>
             ) : (
@@ -526,7 +532,13 @@ export function EventNotificationsConfig() {
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-                  <Button onClick={saveEmail} className="bg-primary hover:bg-primary/90 text-primary-foreground">Save</Button>
+                  <Button
+                    onClick={saveEmail}
+                    variant="outline"
+                    className="text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
+                  >
+                    Save
+                  </Button>
                 </DialogFooter>
               </>
             )}

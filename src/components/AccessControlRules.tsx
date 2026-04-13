@@ -230,7 +230,11 @@ export function AccessControlRules() {
           </h2>
           <p className="text-muted-foreground">Define rules for network access control and policy assignment</p>
         </div>
-        <Button onClick={openCreateDialog} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+        <Button
+          onClick={openCreateDialog}
+          variant="outline"
+          className="text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Create Rule
         </Button>

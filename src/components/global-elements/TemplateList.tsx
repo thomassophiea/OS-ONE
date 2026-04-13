@@ -97,7 +97,8 @@ export function TemplateList({ templates, onEdit, onCreate, onDelete, onDuplicat
               </p>
               <Button
                 size="sm"
-                className="mt-4 bg-primary hover:bg-primary/90 text-primary-foreground"
+                variant="outline"
+                className="mt-4 text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
                 onClick={onCreate}
               >
                 <Plus className="h-4 w-4 mr-1.5" />

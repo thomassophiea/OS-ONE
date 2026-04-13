@@ -58,10 +58,10 @@ export function TimelineControls({
             {/* Status indicator - click to unlock if locked */}
             {isLocked ? (
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
                 onClick={onToggleLock}
-                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md font-semibold"
+                className="gap-2 shadow-md font-semibold text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
                 title="Click to unlock (or click on any chart)"
               >
                 <Lock className="h-4 w-4" />

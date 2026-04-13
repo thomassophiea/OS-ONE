@@ -180,7 +180,11 @@ export function RFManagementTools() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button onClick={handleCreate} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button
+              onClick={handleCreate}
+              variant="outline"
+              className="text-high-emphasis border-border hover:bg-accent hover:text-high-emphasis"
+            >
               <Plus className="h-4 w-4 mr-2" />
               Create Profile
             </Button>
